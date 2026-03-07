@@ -1,7 +1,6 @@
 const express = require("express");
 const path = require("path");
 const lti = require("ltijs").Provider;
-const { DeepLinking } = require("ltijs").Provider.Services;
 const OpenAI = require("openai");
 
 const openai = new OpenAI({
