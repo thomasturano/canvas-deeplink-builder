@@ -19,6 +19,7 @@ lti.setup(
   {
     appRoute: "/",
     loginRoute: "/lti/login",
+    redirectUri: "/lti/launch",
     devMode: true
   }
 );
