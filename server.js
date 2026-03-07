@@ -1,5 +1,4 @@
 const express = require("express");
-const path = require("path");
 const lti = require("ltijs").Provider;
 const OpenAI = require("openai");
 
@@ -142,38 +141,6 @@ lti.onDeepLinking(async (token, req, res) => {
 });
 
 // -----------------------------
-// Generate preview with OpenAI
-// -----------------------------
-
-    const html = completion.choices[0].message.content;
-    res.send(html);
-
-// -----------------------------
-// Return deep link content
-// -----------------------------
-app.post("/return-deeplink", async (req, res) => {
-  try {
-    const html = req.body.html || "<p>No content generated.</p>";
-
-    const items = [
-      {
-        type: "html",
-        html
-      }
-    ];
-
-    const form = await lti.DeepLinking.createDeepLinkingForm(res.locals.token, items, {
-      message: "Content added from Curriculum Builder"
-    });
-
-    res.send(form);
-  } catch (error) {
-    console.error(error);
-    res.send("Deep linking failed.");
-  }
-});
-
-// -----------------------------
 // Attach ltijs to Express
 // -----------------------------
 lti.deploy({ port: PORT }).then(() => {
@@ -195,12 +162,12 @@ lti.deploy({ port: PORT }).then(() => {
         messages: [
           {
             role: "system",
-            content: "You help teachers create standards-aligned classroom content for Canvas LMS. Return ONLY valid HTML. Do not use markdown. Do not wrap the response in code fences."
+            content:
+              "You help teachers create standards-aligned classroom content for Canvas LMS. Return ONLY valid HTML. Do not use markdown. Do not wrap the response in code fences."
           },
           {
             role: "user",
-            content: `Standard: ${standard}
-Teacher request: ${prompt}`
+            content: `Standard: ${standard}\nTeacher request: ${prompt}`
           }
         ]
       });
@@ -224,9 +191,13 @@ Teacher request: ${prompt}`
         }
       ];
 
-      const form = await lti.DeepLinking.createDeepLinkingForm(res.locals.token, items, {
-        message: "Content added from Curriculum Builder"
-      });
+      const form = await lti.DeepLinking.createDeepLinkingForm(
+        res.locals.token,
+        items,
+        {
+          message: "Content added from Curriculum Builder"
+        }
+      );
 
       res.send(form);
     } catch (error) {
