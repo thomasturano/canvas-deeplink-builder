@@ -1,1 +1,14 @@
-
+{
+  "name": "canvas-deeplink-builder",
+  "version": "1.0.0",
+  "description": "Canvas deep linking builder",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ltijs": "^5.9.6",
+    "openai": "^4.0.0"
+  }
+}
