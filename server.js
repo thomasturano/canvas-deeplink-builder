@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 3000;
 lti.setup(
   process.env.LTI_KEY || "super-secret-lti-key-change-me",
   {
-    url: process.env.DATABASE_URL || "mongodb://127.0.0.1/ltijs"
+    url: process.env.DATABASE_URL
   },
   {
     appRoute: "/",
@@ -194,9 +194,7 @@ lti.deploy({ port: PORT }).then(() => {
       const form = await lti.DeepLinking.createDeepLinkingForm(
         res.locals.token,
         items,
-        {
-          message: "Content added from Curriculum Builder"
-        }
+        { message: "Content added from Curriculum Builder" }
       );
 
       res.send(form);
