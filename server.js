@@ -155,11 +155,10 @@ app.post("/generate", async (req, res) => {
           role: "system",
           content: "You help teachers create standards-aligned classroom content for Canvas LMS. Return ONLY valid HTML. Do not use markdown. Do not wrap the response in code fences."
         },
-        {
-          role: "user",
-          content: `Standard: ${standard}
-Teacher request: ${prompt}`
-        }
+{
+  role: "user",
+  content: `Standard: ${standard}\nTeacher request: ${prompt}`
+}
       ]
     });
 
