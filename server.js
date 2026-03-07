@@ -4,16 +4,11 @@ const lti = require("ltijs").Provider;
 const { DeepLinking } = require("ltijs").Provider.Services;
 const OpenAI = require("openai");
 
-const app = express();
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
 const PORT = process.env.PORT || 3000;
-
-// Basic Express middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // -----------------------------
 // LTI setup
@@ -29,13 +24,6 @@ lti.setup(
     devMode: true
   }
 );
-
-// -----------------------------
-// Simple homepage
-// -----------------------------
-app.get("/", (req, res) => {
-  res.send("Canvas Deep Link Builder is running.");
-});
 
 // -----------------------------
 // Deep linking launch
@@ -212,6 +200,62 @@ app.post("/return-deeplink", async (req, res) => {
 // -----------------------------
 // Attach ltijs to Express
 // -----------------------------
-lti.app.use(app);
+lti.deploy({ port: PORT }).then(() => {
+  const app = lti.app;
 
-lti.deploy({ port: PORT });
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
+  app.get("/", (req, res) => {
+    res.send("Canvas Deep Link Builder is running.");
+  });
+
+  app.post("/generate", async (req, res) => {
+    try {
+      const { standard, prompt } = req.body;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You help teachers create standards-aligned classroom content for Canvas LMS. Return ONLY valid HTML. Do not use markdown. Do not wrap the response in code fences."
+          },
+          {
+            role: "user",
+            content: `Standard: ${standard}
+Teacher request: ${prompt}`
+          }
+        ]
+      });
+
+      const html = completion.choices[0].message.content;
+      res.send(html);
+    } catch (error) {
+      console.error(error);
+      res.send("<p>Error generating content.</p>");
+    }
+  });
+
+  app.post("/return-deeplink", async (req, res) => {
+    try {
+      const html = req.body.html || "<p>No content generated.</p>";
+
+      const items = [
+        {
+          type: "html",
+          html
+        }
+      ];
+
+      const form = await lti.DeepLinking.createDeepLinkingForm(res.locals.token, items, {
+        message: "Content added from Curriculum Builder"
+      });
+
+      res.send(form);
+    } catch (error) {
+      console.error(error);
+      res.send("Deep linking failed.");
+    }
+  });
+});
