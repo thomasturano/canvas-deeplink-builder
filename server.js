@@ -23,6 +23,18 @@ lti.setup(
   }
 );
 
+lti.registerPlatform({
+  url: "https://canvas.instructure.com",
+  name: "Canvas",
+  clientId: "131630000000000243",
+  authenticationEndpoint: "https://sso.canvaslms.com/api/lti/authorize_redirect",
+  accesstokenEndpoint: "https://cclayton.instructure.com/login/oauth2/token",
+  authConfig: {
+    method: "JWK_SET",
+    key: "https://cclayton.instructure.com/api/lti/security/jwks"
+  }
+});
+
 // -----------------------------
 // Deep linking launch
 // -----------------------------
