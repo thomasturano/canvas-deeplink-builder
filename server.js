@@ -147,11 +147,6 @@ lti.onDeepLinking(async (token, req, res) => {
 
     const html = completion.choices[0].message.content;
     res.send(html);
-  } catch (error) {
-    console.error(error);
-    res.send("<p>Error generating content.</p>");
-  }
-});
 
 // -----------------------------
 // Return deep link content
