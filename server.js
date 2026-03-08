@@ -44,17 +44,16 @@ lti.onDeepLinking(async (token, req, res) => {
           font-family: Inter, Arial, sans-serif;
           background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
           color: #0f172a;
-          padding: 28px;
+          padding: 24px;
         }
 
         .shell {
-          max-width: 920px;
+          max-width: 980px;
           margin: 0 auto;
         }
 
         .card {
-          background: rgba(255, 255, 255, 0.9);
-          backdrop-filter: blur(8px);
+          background: rgba(255, 255, 255, 0.96);
           border: 1px solid #e2e8f0;
           border-radius: 20px;
           box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
@@ -62,7 +61,7 @@ lti.onDeepLinking(async (token, req, res) => {
         }
 
         .header {
-          padding: 28px 28px 18px 28px;
+          padding: 26px 28px 18px 28px;
           border-bottom: 1px solid #e2e8f0;
           background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
         }
@@ -75,13 +74,12 @@ lti.onDeepLinking(async (token, req, res) => {
           color: #3730a3;
           font-size: 12px;
           font-weight: 700;
-          letter-spacing: 0.02em;
           margin-bottom: 12px;
         }
 
         h1 {
           margin: 0 0 8px 0;
-          font-size: 32px;
+          font-size: 30px;
           line-height: 1.1;
         }
 
@@ -94,13 +92,10 @@ lti.onDeepLinking(async (token, req, res) => {
 
         .content {
           padding: 24px 28px 28px 28px;
-          display: grid;
-          gap: 20px;
         }
 
-        .field-grid {
-          display: grid;
-          gap: 18px;
+        .field {
+          margin-bottom: 18px;
         }
 
         .field label {
@@ -119,9 +114,9 @@ lti.onDeepLinking(async (token, req, res) => {
           padding: 14px 16px;
           font-size: 15px;
           color: #0f172a;
-          background: #ffffff;
-          transition: all 0.18s ease;
+          background: #fff;
           outline: none;
+          transition: all 0.18s ease;
         }
 
         .field input:focus,
@@ -131,15 +126,15 @@ lti.onDeepLinking(async (token, req, res) => {
         }
 
         .field textarea {
-          min-height: 150px;
+          min-height: 140px;
           resize: vertical;
         }
 
         .button-row {
           display: flex;
-          flex-wrap: wrap;
           gap: 12px;
-          align-items: center;
+          flex-wrap: wrap;
+          margin-bottom: 18px;
         }
 
         button {
@@ -185,15 +180,11 @@ lti.onDeepLinking(async (token, req, res) => {
           min-height: 20px;
           font-size: 13px;
           color: #475569;
+          margin-bottom: 16px;
         }
 
         .status.error {
           color: #b91c1c;
-        }
-
-        .preview-wrap {
-          display: grid;
-          gap: 10px;
         }
 
         .preview-header {
@@ -201,38 +192,83 @@ lti.onDeepLinking(async (token, req, res) => {
           justify-content: space-between;
           align-items: center;
           gap: 12px;
+          margin-bottom: 12px;
+          flex-wrap: wrap;
         }
 
         .preview-title {
+          font-size: 15px;
+          font-weight: 700;
+        }
+
+        .select-all-wrap {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          color: #475569;
+        }
+
+        .chunks {
+          display: grid;
+          gap: 14px;
+          margin-bottom: 18px;
+        }
+
+        .chunk-card {
+          border: 1px solid #dbeafe;
+          border-radius: 16px;
+          background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+          overflow: hidden;
+        }
+
+        .chunk-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          padding: 14px 16px;
+          border-bottom: 1px solid #e2e8f0;
+          background: #f8fafc;
+        }
+
+        .chunk-title {
           font-size: 14px;
           font-weight: 700;
           color: #0f172a;
         }
 
-        .preview-note {
-          font-size: 12px;
-          color: #64748b;
+        .chunk-check {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          color: #475569;
+          white-space: nowrap;
         }
 
-        .preview {
-          border: 1px solid #dbeafe;
-          background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-          border-radius: 16px;
-          padding: 20px;
-          min-height: 120px;
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
-          overflow-wrap: anywhere;
+        .chunk-body {
+          padding: 16px;
         }
 
-        .preview h1,
-        .preview h2,
-        .preview h3 {
+        .chunk-body h1,
+        .chunk-body h2,
+        .chunk-body h3,
+        .chunk-body h4 {
           margin-top: 0;
         }
 
-        .preview ul,
-        .preview ol {
+        .chunk-body ul,
+        .chunk-body ol {
           padding-left: 22px;
+        }
+
+        .empty-preview {
+          border: 1px dashed #cbd5e1;
+          border-radius: 16px;
+          padding: 20px;
+          color: #64748b;
+          background: #fff;
         }
 
         .loading {
@@ -266,40 +302,39 @@ lti.onDeepLinking(async (token, req, res) => {
             <div class="eyebrow">Canvas + AI</div>
             <h1>AI Curriculum Builder</h1>
             <p class="subtext">
-              Generate standards-aligned content, review it, then insert it directly into the Canvas editor.
+              Generate chunked standards-aligned content, choose the sections you want, then insert only those into Canvas.
             </p>
           </div>
 
           <div class="content">
-            <div class="field-grid">
-              <div class="field">
-                <label for="standard">Standard</label>
-                <input id="standard" placeholder="Ex: 6.RP.A.1" />
-              </div>
+            <div class="field">
+              <label for="standard">Standard</label>
+              <input id="standard" placeholder="Ex: 6.RP.A.1" />
+            </div>
 
-              <div class="field">
-                <label for="prompt">Teacher Prompt</label>
-                <textarea id="prompt" placeholder="Ex: Create a student-facing content page with an overview, vocabulary, examples, and a short check for understanding."></textarea>
-              </div>
+            <div class="field">
+              <label for="prompt">Teacher Prompt</label>
+              <textarea id="prompt" placeholder="Ex: Create a student-facing content page with an overview, vocabulary, worked examples, and a quick check for understanding."></textarea>
             </div>
 
             <div class="button-row">
               <button id="generateBtn" class="primary" onclick="generate()">Generate</button>
-              <button id="insertBtn" class="secondary" onclick="insertIntoCanvas()">Insert Into Canvas</button>
+              <button id="insertBtn" class="secondary" onclick="insertIntoCanvas()">Insert Checked Into Canvas</button>
               <button class="ghost" onclick="clearPreview()">Clear</button>
             </div>
 
             <div id="status" class="status"></div>
 
-            <div class="preview-wrap">
-              <div class="preview-header">
-                <div class="preview-title">Preview</div>
-                <div class="preview-note">This content will be inserted into the Canvas editor.</div>
-              </div>
-              <div id="preview" class="preview">
-                <span style="color:#64748b;">Nothing generated yet.</span>
-              </div>
+            <div class="preview-header">
+              <div class="preview-title">Preview</div>
+              <label class="select-all-wrap">
+                <input type="checkbox" id="selectAll" onchange="toggleAllChunks(this.checked)" />
+                Select all
+              </label>
             </div>
+
+            <div id="chunks" class="chunks"></div>
+            <div id="emptyPreview" class="empty-preview">Nothing generated yet.</div>
           </div>
         </div>
       </div>
@@ -309,7 +344,11 @@ lti.onDeepLinking(async (token, req, res) => {
         const generateBtn = document.getElementById("generateBtn");
         const insertBtn = document.getElementById("insertBtn");
         const statusEl = document.getElementById("status");
-        const previewEl = document.getElementById("preview");
+        const chunksEl = document.getElementById("chunks");
+        const emptyPreviewEl = document.getElementById("emptyPreview");
+        const selectAllEl = document.getElementById("selectAll");
+
+        let generatedChunks = [];
 
         function setStatus(message, isError = false) {
           statusEl.textContent = message || "";
@@ -327,8 +366,67 @@ lti.onDeepLinking(async (token, req, res) => {
         }
 
         function clearPreview() {
-          previewEl.innerHTML = '<span style="color:#64748b;">Nothing generated yet.</span>';
+          generatedChunks = [];
+          chunksEl.innerHTML = "";
+          emptyPreviewEl.style.display = "block";
+          emptyPreviewEl.textContent = "Nothing generated yet.";
+          selectAllEl.checked = false;
           setStatus("");
+        }
+
+        function renderChunks() {
+          chunksEl.innerHTML = "";
+
+          if (!generatedChunks.length) {
+            emptyPreviewEl.style.display = "block";
+            emptyPreviewEl.textContent = "Nothing generated yet.";
+            return;
+          }
+
+          emptyPreviewEl.style.display = "none";
+
+          generatedChunks.forEach((chunk, index) => {
+            const wrapper = document.createElement("div");
+            wrapper.className = "chunk-card";
+
+            wrapper.innerHTML = \`
+              <div class="chunk-top">
+                <div class="chunk-title">\${chunk.title || "Generated Content " + (index + 1)}</div>
+                <label class="chunk-check">
+                  <span>Check</span>
+                  <input type="checkbox" class="chunk-checkbox" data-index="\${index}" \${chunk.selected ? "checked" : ""} onchange="toggleChunk(\${index}, this.checked)" />
+                </label>
+              </div>
+              <div class="chunk-body">\${chunk.html || ""}</div>
+            \`;
+
+            chunksEl.appendChild(wrapper);
+          });
+
+          updateSelectAllState();
+        }
+
+        function toggleChunk(index, checked) {
+          generatedChunks[index].selected = checked;
+          updateSelectAllState();
+        }
+
+        function toggleAllChunks(checked) {
+          generatedChunks = generatedChunks.map(chunk => ({
+            ...chunk,
+            selected: checked
+          }));
+          renderChunks();
+        }
+
+        function updateSelectAllState() {
+          if (!generatedChunks.length) {
+            selectAllEl.checked = false;
+            return;
+          }
+
+          const allChecked = generatedChunks.every(chunk => chunk.selected);
+          selectAllEl.checked = allChecked;
         }
 
         async function generate() {
@@ -341,7 +439,7 @@ lti.onDeepLinking(async (token, req, res) => {
           }
 
           try {
-            setStatus("Generating content...");
+            setStatus("Generating chunked content...");
             setLoading(generateBtn, true, "Generate");
 
             const res = await fetch("/generate", {
@@ -350,36 +448,48 @@ lti.onDeepLinking(async (token, req, res) => {
               body: JSON.stringify({ standard, prompt, ltik })
             });
 
-            const html = await res.text();
+            const text = await res.text();
 
             if (!res.ok) {
-              previewEl.innerHTML = '<span style="color:#b91c1c;">Generation failed.</span>';
-              setStatus("Generate failed. Check your server logs for details.", true);
+              setStatus("Generate failed. Check your server logs.", true);
+              emptyPreviewEl.style.display = "block";
+              emptyPreviewEl.textContent = "Generation failed.";
               return;
             }
 
-            previewEl.innerHTML = html;
+            const parsed = JSON.parse(text);
+
+            generatedChunks = (parsed.chunks || []).map(chunk => ({
+              title: chunk.title,
+              html: chunk.html,
+              selected: false
+            }));
+
+            renderChunks();
             setStatus("Content generated successfully.");
           } catch (err) {
             console.error(err);
-            previewEl.innerHTML = '<span style="color:#b91c1c;">Generation failed.</span>';
             setStatus("Generate failed. Please try again.", true);
+            emptyPreviewEl.style.display = "block";
+            emptyPreviewEl.textContent = "Generation failed.";
           } finally {
             setLoading(generateBtn, false, "Generate");
           }
         }
 
         async function insertIntoCanvas() {
-          const html = previewEl.innerHTML;
+          const selectedChunks = generatedChunks.filter(chunk => chunk.selected);
 
-          if (!html || html.includes("Nothing generated yet")) {
-            setStatus("Generate content before inserting.", true);
+          if (!selectedChunks.length) {
+            setStatus("Please check at least one content chunk to insert.", true);
             return;
           }
 
+          const html = selectedChunks.map(chunk => chunk.html).join("\\n<hr />\\n");
+
           try {
-            setStatus("Sending content back to Canvas...");
-            setLoading(insertBtn, true, "Insert Into Canvas");
+            setStatus("Sending selected content back to Canvas...");
+            setLoading(insertBtn, true, "Insert Checked Into Canvas");
 
             const res = await fetch("/return-deeplink", {
               method: "POST",
@@ -390,7 +500,7 @@ lti.onDeepLinking(async (token, req, res) => {
             const page = await res.text();
 
             if (!res.ok) {
-              setStatus("Deep linking failed. Check your server logs.", true);
+              setStatus("Insert failed. Check your server logs.", true);
               return;
             }
 
@@ -401,7 +511,7 @@ lti.onDeepLinking(async (token, req, res) => {
             console.error(err);
             setStatus("Insert failed. Please try again.", true);
           } finally {
-            setLoading(insertBtn, false, "Insert Into Canvas");
+            setLoading(insertBtn, false, "Insert Checked Into Canvas");
           }
         }
       </script>
@@ -414,7 +524,6 @@ lti.onDeepLinking(async (token, req, res) => {
 // Deploy LTI provider
 // -----------------------------
 lti.deploy({ port: PORT }).then(async () => {
-
   const app = lti.app;
 
   // REGISTER CANVAS PLATFORM
@@ -441,69 +550,83 @@ lti.deploy({ port: PORT }).then(async () => {
   // Generate content with AI
   // -----------------------------
   app.post("/generate", async (req, res) => {
-
     try {
-
-      const { standard, prompt } = req.body
+      const { standard, prompt } = req.body;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
         messages: [
           {
-            role:"system",
-            content:"You create standards-aligned content for Canvas LMS. Return ONLY raw HTML. Do not use markdown. Do not wrap the response in triple backticks. Do not say html before the content. Start immediately with the first HTML tag."
+            role: "system",
+            content: `You create standards-aligned content for Canvas LMS.
+
+Return ONLY valid JSON in this exact shape:
+{
+  "chunks": [
+    {
+      "title": "Short chunk title",
+      "html": "<section>...</section>"
+    }
+  ]
+}
+
+Rules:
+- Return exactly 3 chunks.
+- Each chunk should be useful on its own.
+- Each chunk html must be valid raw HTML.
+- Do not use markdown.
+- Do not wrap anything in triple backticks.
+- Good chunk examples: Overview, Key Vocabulary, Worked Example, Practice, Exit Ticket, Directions, Teacher Note.
+- Keep titles short and teacher-friendly.`
           },
           {
-            role:"user",
-            content:`Standard: ${standard}\nTeacher request: ${prompt}`
+            role: "user",
+            content: `Standard: ${standard}\nTeacher request: ${prompt}`
           }
         ]
-      })
+      });
 
-      const html = completion.choices[0].message.content
+      const raw = completion.choices[0].message.content;
 
-      res.send(html)
+      const cleaned = raw
+        .replace(/^```json\\s*/i, "")
+        .replace(/^```\\s*/i, "")
+        .replace(/\\s*```$/i, "");
 
-    } catch(err) {
+      const parsed = JSON.parse(cleaned);
 
-      console.error(err)
-      res.send("<p>Error generating content</p>")
-
+      res.json(parsed);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send(JSON.stringify({ chunks: [] }));
     }
-
   });
 
   // -----------------------------
   // Return deep link to Canvas
   // -----------------------------
-  app.post("/return-deeplink", async (req,res)=>{
-
-    try{
-
-      const html = req.body.html || "<p>No content generated</p>"
+  app.post("/return-deeplink", async (req, res) => {
+    try {
+      const html = req.body.html || "<p>No content generated</p>";
 
       const items = [
         {
-          type:"html",
+          type: "html",
           html
         }
-      ]
+      ];
 
       const form = await lti.DeepLinking.createDeepLinkingForm(
         res.locals.token,
         items,
-        { message:"AI Curriculum Builder content" }
-      )
+        { message: "AI Curriculum Builder content" }
+      );
 
-      res.send(form)
-
-    } catch(err){
-
-      console.error(err)
-      res.send("Deep linking failed")
-
+      res.send(form);
+    } catch (err) {
+      console.error(err);
+      res.send("Deep linking failed");
     }
-
   });
-
 });
