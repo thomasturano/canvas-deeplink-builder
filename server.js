@@ -107,7 +107,8 @@ lti.onDeepLinking(async (token, req, res) => {
         }
 
         .field input,
-        .field textarea {
+        .field textarea,
+        .field select {
           width: 100%;
           border: 1px solid #cbd5e1;
           border-radius: 14px;
@@ -120,7 +121,8 @@ lti.onDeepLinking(async (token, req, res) => {
         }
 
         .field input:focus,
-        .field textarea:focus {
+        .field textarea:focus,
+        .field select:focus {
           border-color: #6366f1;
           box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
         }
@@ -135,6 +137,17 @@ lti.onDeepLinking(async (token, req, res) => {
           gap: 12px;
           flex-wrap: wrap;
           margin-bottom: 18px;
+        }
+
+        .bottom-actions {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-top: 22px;
+          padding-top: 18px;
+          border-top: 1px solid #e2e8f0;
         }
 
         button {
@@ -254,7 +267,8 @@ lti.onDeepLinking(async (token, req, res) => {
         .chunk-body h1,
         .chunk-body h2,
         .chunk-body h3,
-        .chunk-body h4 {
+        .chunk-body h4,
+        .chunk-body h5 {
           margin-top: 0;
         }
 
@@ -289,6 +303,11 @@ lti.onDeepLinking(async (token, req, res) => {
         .dot:nth-child(2) { animation-delay: 0.15s; }
         .dot:nth-child(3) { animation-delay: 0.3s; }
 
+        .helper-note {
+          font-size: 13px;
+          color: #64748b;
+        }
+
         @keyframes pulse {
           0%, 100% { opacity: 0.25; transform: translateY(0); }
           50% { opacity: 1; transform: translateY(-2px); }
@@ -302,11 +321,22 @@ lti.onDeepLinking(async (token, req, res) => {
             <div class="eyebrow">Canvas + AI</div>
             <h1>AI Curriculum Builder</h1>
             <p class="subtext">
-              Generate chunked standards-aligned content, choose the sections you want, then insert only those into Canvas.
+              Choose what you are creating, generate chunked content, then insert only the sections you want into Canvas.
             </p>
           </div>
 
           <div class="content">
+            <div class="field">
+              <label for="itemType">What are you creating?</label>
+              <select id="itemType">
+                <option value="Content Page">Content Page</option>
+                <option value="Assignment">Assignment</option>
+                <option value="Discussion">Discussion</option>
+                <option value="Quiz Directions">Quiz Directions</option>
+                <option value="Quiz Question">Quiz Question</option>
+              </select>
+            </div>
+
             <div class="field">
               <label for="standard">Standard</label>
               <input id="standard" placeholder="Ex: 6.RP.A.1" />
@@ -319,7 +349,6 @@ lti.onDeepLinking(async (token, req, res) => {
 
             <div class="button-row">
               <button id="generateBtn" class="primary" onclick="generate()">Generate</button>
-              <button id="insertBtn" class="secondary" onclick="insertIntoCanvas()">Insert Checked Into Canvas</button>
               <button class="ghost" onclick="clearPreview()">Clear</button>
             </div>
 
@@ -335,6 +364,11 @@ lti.onDeepLinking(async (token, req, res) => {
 
             <div id="chunks" class="chunks"></div>
             <div id="emptyPreview" class="empty-preview">Nothing generated yet.</div>
+
+            <div class="bottom-actions">
+              <div class="helper-note">Only checked sections will be inserted into Canvas.</div>
+              <button id="insertBtn" class="secondary" onclick="insertIntoCanvas()">Insert Checked Into Canvas</button>
+            </div>
           </div>
         </div>
       </div>
@@ -430,11 +464,12 @@ lti.onDeepLinking(async (token, req, res) => {
         }
 
         async function generate() {
+          const itemType = document.getElementById("itemType").value;
           const standard = document.getElementById("standard").value.trim();
           const prompt = document.getElementById("prompt").value.trim();
 
-          if (!standard || !prompt) {
-            setStatus("Please enter both a standard and a teacher prompt.", true);
+          if (!itemType || !standard || !prompt) {
+            setStatus("Please choose what you are creating and enter both a standard and a teacher prompt.", true);
             return;
           }
 
@@ -445,7 +480,7 @@ lti.onDeepLinking(async (token, req, res) => {
             const res = await fetch("/generate", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ standard, prompt, ltik })
+              body: JSON.stringify({ itemType, standard, prompt, ltik })
             });
 
             const text = await res.text();
@@ -526,7 +561,6 @@ lti.onDeepLinking(async (token, req, res) => {
 lti.deploy({ port: PORT }).then(async () => {
   const app = lti.app;
 
-  // REGISTER CANVAS PLATFORM
   await lti.registerPlatform({
     url: "https://canvas.instructure.com",
     name: "Canvas",
@@ -551,7 +585,7 @@ lti.deploy({ port: PORT }).then(async () => {
   // -----------------------------
   app.post("/generate", async (req, res) => {
     try {
-      const { standard, prompt } = req.body;
+      const { itemType, standard, prompt } = req.body;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -571,18 +605,47 @@ Return ONLY valid JSON in this exact shape:
   ]
 }
 
-Rules:
+General rules:
 - Return exactly 3 chunks.
 - Each chunk should be useful on its own.
 - Each chunk html must be valid raw HTML.
 - Do not use markdown.
 - Do not wrap anything in triple backticks.
-- Good chunk examples: Overview, Key Vocabulary, Worked Example, Practice, Exit Ticket, Directions, Teacher Note.
-- Keep titles short and teacher-friendly.`
+- Keep titles short and teacher-friendly.
+- Make the chunks match the selected Canvas item type.
+
+Chunking rules by item type:
+
+If itemType is "Content Page":
+1. Overview
+2. Key Concepts or Vocabulary
+3. Practice / Check for Understanding
+
+If itemType is "Assignment":
+1. Assignment Overview
+2. Student Directions
+3. Submission Expectations
+
+If itemType is "Discussion":
+1. Discussion Prompt
+2. Response Expectations
+3. Reply / Follow-Up Guidance
+
+If itemType is "Quiz Directions":
+1. Quiz Directions
+2. Expectations / Rules
+3. Reminders / Tips
+
+If itemType is "Quiz Question":
+1. Question
+2. Answer Choices or Expected Response
+3. Teacher Note
+
+Make the output feel ready for a teacher to insert into Canvas immediately.`
           },
           {
             role: "user",
-            content: `Standard: ${standard}\nTeacher request: ${prompt}`
+            content: `Item type: ${itemType}\nStandard: ${standard}\nTeacher request: ${prompt}`
           }
         ]
       });
@@ -590,9 +653,9 @@ Rules:
       const raw = completion.choices[0].message.content;
 
       const cleaned = raw
-        .replace(/^```json\\s*/i, "")
-        .replace(/^```\\s*/i, "")
-        .replace(/\\s*```$/i, "");
+        .replace(/^\\\`\\\`\\\`json\\s*/i, "")
+        .replace(/^\\\`\\\`\\\`\\s*/i, "")
+        .replace(/\\s*\\\`\\\`\\\`$/i, "");
 
       const parsed = JSON.parse(cleaned);
 
