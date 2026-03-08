@@ -451,7 +451,7 @@ lti.deploy({ port: PORT }).then(async () => {
         messages: [
           {
             role:"system",
-            content:"Generate standards-aligned HTML for Canvas LMS. Return only valid HTML."
+            content:"You create standards-aligned content for Canvas LMS. Return ONLY raw HTML. Do not use markdown. Do not wrap the response in triple backticks. Do not say html before the content. Start immediately with the first HTML tag."
           },
           {
             role:"user",
