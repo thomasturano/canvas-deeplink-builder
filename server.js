@@ -48,20 +48,20 @@ lti.onDeepLinking(async (token, req, res) => {
         }
 
         .shell {
-          max-width: 980px;
+          max-width: 1040px;
           margin: 0 auto;
         }
 
         .card {
           background: rgba(255, 255, 255, 0.96);
           border: 1px solid #e2e8f0;
-          border-radius: 20px;
+          border-radius: 22px;
           box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
           overflow: hidden;
         }
 
         .header {
-          padding: 26px 28px 18px 28px;
+          padding: 28px 30px 18px 30px;
           border-bottom: 1px solid #e2e8f0;
           background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
         }
@@ -70,8 +70,8 @@ lti.onDeepLinking(async (token, req, res) => {
           display: inline-block;
           padding: 6px 10px;
           border-radius: 999px;
-          background: #e0e7ff;
-          color: #3730a3;
+          background: #dbeafe;
+          color: #1d4ed8;
           font-size: 12px;
           font-weight: 700;
           margin-bottom: 12px;
@@ -88,14 +88,22 @@ lti.onDeepLinking(async (token, req, res) => {
           color: #475569;
           font-size: 14px;
           line-height: 1.5;
+          max-width: 860px;
         }
 
         .content {
-          padding: 24px 28px 28px 28px;
+          padding: 24px 30px 30px 30px;
         }
 
-        .field {
+        .form-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 18px;
           margin-bottom: 18px;
+        }
+
+        .field-full {
+          grid-column: 1 / -1;
         }
 
         .field label {
@@ -123,8 +131,8 @@ lti.onDeepLinking(async (token, req, res) => {
         .field input:focus,
         .field textarea:focus,
         .field select:focus {
-          border-color: #6366f1;
-          box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+          border-color: #2563eb;
+          box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
         }
 
         .field textarea {
@@ -242,7 +250,7 @@ lti.onDeepLinking(async (token, req, res) => {
           gap: 12px;
           padding: 14px 16px;
           border-bottom: 1px solid #e2e8f0;
-          background: #f8fafc;
+          background: #eff6ff;
         }
 
         .chunk-title {
@@ -261,7 +269,12 @@ lti.onDeepLinking(async (token, req, res) => {
         }
 
         .chunk-body {
-          padding: 16px;
+          padding: 18px;
+        }
+
+        .chunk-body section {
+          border-left: 4px solid #93c5fd;
+          padding-left: 14px;
         }
 
         .chunk-body h1,
@@ -270,11 +283,23 @@ lti.onDeepLinking(async (token, req, res) => {
         .chunk-body h4,
         .chunk-body h5 {
           margin-top: 0;
+          color: #0f172a;
+        }
+
+        .chunk-body p {
+          line-height: 1.6;
         }
 
         .chunk-body ul,
         .chunk-body ol {
           padding-left: 22px;
+          line-height: 1.6;
+        }
+
+        .chunk-body hr {
+          border: none;
+          border-top: 1px solid #dbeafe;
+          margin: 16px 0;
         }
 
         .empty-preview {
@@ -312,6 +337,12 @@ lti.onDeepLinking(async (token, req, res) => {
           0%, 100% { opacity: 0.25; transform: translateY(0); }
           50% { opacity: 1; transform: translateY(-2px); }
         }
+
+        @media (max-width: 720px) {
+          .form-grid {
+            grid-template-columns: 1fr;
+          }
+        }
       </style>
     </head>
     <body>
@@ -321,30 +352,43 @@ lti.onDeepLinking(async (token, req, res) => {
             <div class="eyebrow">Canvas + AI</div>
             <h1>AI Curriculum Builder</h1>
             <p class="subtext">
-              Choose what you are creating, generate chunked content, then insert only the sections you want into Canvas.
+              Choose what you are creating, choose the audience/support level, generate chunked content, then insert only the sections you want into Canvas.
             </p>
           </div>
 
           <div class="content">
-            <div class="field">
-              <label for="itemType">What are you creating?</label>
-              <select id="itemType">
-                <option value="Content Page">Content Page</option>
-                <option value="Assignment">Assignment</option>
-                <option value="Discussion">Discussion</option>
-                <option value="Quiz Directions">Quiz Directions</option>
-                <option value="Quiz Question">Quiz Question</option>
-              </select>
-            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label for="itemType">What are you creating?</label>
+                <select id="itemType">
+                  <option value="Content Page">Content Page</option>
+                  <option value="Assignment">Assignment</option>
+                  <option value="Discussion">Discussion</option>
+                  <option value="Quiz Directions">Quiz Directions</option>
+                  <option value="Quiz Question">Quiz Question</option>
+                </select>
+              </div>
 
-            <div class="field">
-              <label for="standard">Standard</label>
-              <input id="standard" placeholder="Ex: 6.RP.A.1" />
-            </div>
+              <div class="field">
+                <label for="supportLevel">Audience / Support level</label>
+                <select id="supportLevel">
+                  <option value="General">General</option>
+                  <option value="Below grade level">Below grade level</option>
+                  <option value="Advanced">Advanced</option>
+                  <option value="ELL support">ELL support</option>
+                  <option value="IEP / scaffolded">IEP / scaffolded</option>
+                </select>
+              </div>
 
-            <div class="field">
-              <label for="prompt">Teacher Prompt</label>
-              <textarea id="prompt" placeholder="Ex: Create a student-facing content page with an overview, vocabulary, worked examples, and a quick check for understanding."></textarea>
+              <div class="field field-full">
+                <label for="standard">Standard</label>
+                <input id="standard" placeholder="Ex: 6.RP.A.1" />
+              </div>
+
+              <div class="field field-full">
+                <label for="prompt">Teacher Prompt</label>
+                <textarea id="prompt" placeholder="Ex: Create a student-facing content page with an overview, vocabulary, worked examples, and a quick check for understanding."></textarea>
+              </div>
             </div>
 
             <div class="button-row">
@@ -465,11 +509,12 @@ lti.onDeepLinking(async (token, req, res) => {
 
         async function generate() {
           const itemType = document.getElementById("itemType").value;
+          const supportLevel = document.getElementById("supportLevel").value;
           const standard = document.getElementById("standard").value.trim();
           const prompt = document.getElementById("prompt").value.trim();
 
-          if (!itemType || !standard || !prompt) {
-            setStatus("Please choose what you are creating and enter both a standard and a teacher prompt.", true);
+          if (!itemType || !supportLevel || !standard || !prompt) {
+            setStatus("Please complete all fields before generating.", true);
             return;
           }
 
@@ -480,7 +525,7 @@ lti.onDeepLinking(async (token, req, res) => {
             const res = await fetch("/generate", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ itemType, standard, prompt, ltik })
+              body: JSON.stringify({ itemType, supportLevel, standard, prompt, ltik })
             });
 
             const text = await res.text();
@@ -585,7 +630,7 @@ lti.deploy({ port: PORT }).then(async () => {
   // -----------------------------
   app.post("/generate", async (req, res) => {
     try {
-      const { itemType, standard, prompt } = req.body;
+      const { itemType, supportLevel, standard, prompt } = req.body;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -594,6 +639,14 @@ lti.deploy({ port: PORT }).then(async () => {
           {
             role: "system",
             content: `You create standards-aligned content for Canvas LMS.
+
+Your style should feel inspired by a polished blue-themed Canvas course template:
+- clean overview-first structure
+- clear section headings
+- student-friendly language
+- support/resources woven in naturally
+- visually scannable chunks
+- professional but warm tone
 
 Return ONLY valid JSON in this exact shape:
 {
@@ -609,43 +662,62 @@ General rules:
 - Return exactly 3 chunks.
 - Each chunk should be useful on its own.
 - Each chunk html must be valid raw HTML.
+- Use semantic HTML only: section, h2, h3, p, ul, ol, li, strong, em, hr, div.
 - Do not use markdown.
 - Do not wrap anything in triple backticks.
 - Keep titles short and teacher-friendly.
 - Make the chunks match the selected Canvas item type.
+- Make the content look polished and ready to insert into Canvas immediately.
+
+Audience / support-level rules:
+- General: standard teacher-ready version
+- Below grade level: simpler language, more chunked steps, concrete examples, reduced cognitive load
+- Advanced: stronger rigor, extension thinking, challenge or enrichment opportunities
+- ELL support: vocabulary support, sentence frames, language scaffolds, simpler phrasing where helpful
+- IEP / scaffolded: step-by-step directions, built-in supports, check-ins, accommodations-friendly wording
 
 Chunking rules by item type:
 
 If itemType is "Content Page":
-1. Overview
-2. Key Concepts or Vocabulary
+1. Week / Lesson Overview
+2. Key Concepts / Vocabulary
 3. Practice / Check for Understanding
 
 If itemType is "Assignment":
 1. Assignment Overview
 2. Student Directions
-3. Submission Expectations
+3. Submission Expectations / Success Criteria
 
 If itemType is "Discussion":
 1. Discussion Prompt
-2. Response Expectations
+2. Posting Expectations
 3. Reply / Follow-Up Guidance
 
 If itemType is "Quiz Directions":
-1. Quiz Directions
-2. Expectations / Rules
-3. Reminders / Tips
+1. Instructions
+2. Guidelines / Expectations
+3. Reminders / Support
 
 If itemType is "Quiz Question":
 1. Question
 2. Answer Choices or Expected Response
 3. Teacher Note
 
-Make the output feel ready for a teacher to insert into Canvas immediately.`
+Formatting guidance:
+- Make each chunk visually nice but still Canvas-safe.
+- Use a top-level <section>.
+- Start each chunk with a clear <h2> or <h3>.
+- Use bullets where they improve readability.
+- For overview-style chunks, include a short intro paragraph.
+- For support-heavy chunks, include a short list of reminders, supports, or scaffolds.
+- Make the result better than a basic template: cleaner, clearer, more usable.`
           },
           {
             role: "user",
-            content: `Item type: ${itemType}\nStandard: ${standard}\nTeacher request: ${prompt}`
+            content: `Item type: ${itemType}
+Audience / Support level: ${supportLevel}
+Standard: ${standard}
+Teacher request: ${prompt}`
           }
         ]
       });
@@ -653,9 +725,9 @@ Make the output feel ready for a teacher to insert into Canvas immediately.`
       const raw = completion.choices[0].message.content;
 
       const cleaned = raw
-        .replace(/^\\\`\\\`\\\`json\\s*/i, "")
-        .replace(/^\\\`\\\`\\\`\\s*/i, "")
-        .replace(/\\s*\\\`\\\`\\\`$/i, "");
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/\s*```$/i, "");
 
       const parsed = JSON.parse(cleaned);
 
