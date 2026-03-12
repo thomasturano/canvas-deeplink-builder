@@ -355,10 +355,10 @@ lti.onDeepLinking(async (token, req, res) => {
       <div class="shell">
         <div class="card">
           <div class="header">
-            <div class="eyebrow">Canvas + AI</div>
+            <div class="eyebrow">NEW!</div>
             <h1>AI Curriculum Builder</h1>
             <p class="subtext">
-              Choose what you are creating, set the audience/support level, type a standard, and the tool will auto-fill subject and year when it recognizes the standard.
+              Choose what you are creating, select the audience/support level, type a standard, and the tool will try to auto-fill subject and year/grade using AI.
             </p>
           </div>
 
@@ -378,18 +378,19 @@ lti.onDeepLinking(async (token, req, res) => {
               <div class="field">
                 <label for="supportLevel">Audience / Support level</label>
                 <select id="supportLevel">
-                  <option value="General">General</option>
-                  <option value="Below grade level">Below grade level</option>
-                  <option value="Advanced">Advanced</option>
-                  <option value="ELL support">ELL support</option>
-                  <option value="IEP / scaffolded">IEP / scaffolded</option>
+                  <option value="Tier 1: Core Instruction for All Students">Tier 1: Core Instruction for All Students</option>
+                  <option value="Tier 2: Targeted Interventions for Small Groups">Tier 2: Targeted Interventions for Small Groups</option>
+                  <option value="Tier 3: Intensive Support for Individuals">Tier 3: Intensive Support for Individuals</option>
+                  <option disabled>────────────</option>
+                  <option value="IEP Support: Translation">IEP Support: Translation</option>
+                  <option value="IEP Support: Scaffolded">IEP Support: Scaffolded</option>
                 </select>
               </div>
 
               <div class="field field-full">
                 <label for="standard">Standard</label>
-                <input id="standard" placeholder="Ex: 6.RP.A.1" oninput="autoFillStandardMeta()" />
-                <div class="field-help">When recognized, the tool will auto-fill subject and year/grade.</div>
+                <input id="standard" placeholder="Ex: 6.RP.A.1" onblur="autoFillStandardMeta()" />
+                <div class="field-help">When recognized, the tool will auto-fill subject and year/grade. You can still edit them manually.</div>
               </div>
 
               <div class="field">
@@ -445,39 +446,6 @@ lti.onDeepLinking(async (token, req, res) => {
 
         let generatedChunks = [];
 
-        const standardMap = {
-          "6.RP.A.1": { subject: "Math", year: "Grade 6" },
-          "6.RP.A.2": { subject: "Math", year: "Grade 6" },
-          "6.RP.A.3": { subject: "Math", year: "Grade 6" },
-          "6.NS.A.1": { subject: "Math", year: "Grade 6" },
-          "6.NS.A.2": { subject: "Math", year: "Grade 6" },
-          "6.NS.B.2": { subject: "Math", year: "Grade 6" },
-          "6.EE.A.1": { subject: "Math", year: "Grade 6" },
-          "6.EE.B.5": { subject: "Math", year: "Grade 6" },
-          "6.G.A.1": { subject: "Math", year: "Grade 6" },
-          "5.ESS.2.1": { subject: "Science", year: "Grade 5" },
-          "5.ESS.2.2": { subject: "Science", year: "Grade 5" },
-          "6.RI.1": { subject: "ELA", year: "Grade 6" },
-          "6.RI.2": { subject: "ELA", year: "Grade 6" },
-          "6.RL.1": { subject: "ELA", year: "Grade 6" },
-          "6.RL.2": { subject: "ELA", year: "Grade 6" }
-        };
-
-        function normalizeStandard(value) {
-          return value.trim().toUpperCase().replace(/\\s+/g, "");
-        }
-
-        function autoFillStandardMeta() {
-          const standard = normalizeStandard(document.getElementById("standard").value);
-          const subjectInput = document.getElementById("subject");
-          const yearInput = document.getElementById("year");
-
-          if (standardMap[standard]) {
-            subjectInput.value = standardMap[standard].subject;
-            yearInput.value = standardMap[standard].year;
-          }
-        }
-
         function setStatus(message, isError = false) {
           statusEl.textContent = message || "";
           statusEl.className = isError ? "status error" : "status";
@@ -490,6 +458,37 @@ lti.onDeepLinking(async (token, req, res) => {
           } else {
             button.disabled = false;
             button.textContent = label;
+          }
+        }
+
+        async function autoFillStandardMeta() {
+          const standard = document.getElementById("standard").value.trim();
+
+          if (!standard || standard.length < 3) return;
+
+          try {
+            setStatus("Detecting subject and grade from standard...");
+
+            const res = await fetch("/detect-standard", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ standard, ltik })
+            });
+
+            const data = await res.json();
+
+            if (data.subject) {
+              document.getElementById("subject").value = data.subject;
+            }
+
+            if (data.grade) {
+              document.getElementById("year").value = data.grade;
+            }
+
+            setStatus("");
+          } catch (err) {
+            console.error(err);
+            setStatus("");
           }
         }
 
@@ -678,6 +677,50 @@ lti.deploy({ port: PORT }).then(async () => {
   });
 
   // -----------------------------
+  // Detect subject + grade from standard using AI
+  // -----------------------------
+  app.post("/detect-standard", async (req, res) => {
+    try {
+      const { standard } = req.body;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: `You identify the subject and grade level of academic standards.
+
+Return JSON only in this exact format:
+{
+  "subject": "Math | ELA | Science | Social Studies | Other",
+  "grade": "Grade X | Kindergarten | Unknown"
+}
+
+Rules:
+- Infer the most likely subject and grade from the standard code.
+- If the standard looks like a Common Core math code such as 6.RP.A.1, return Math and Grade 6.
+- If the standard looks like an ELA code such as RL.6.2 or 6.RI.1, return ELA and Grade 6.
+- If the standard looks like NGSS like 5-ESS2-1, return Science and Grade 5.
+- If unsure, return "Other" and "Unknown".
+- Do not include explanation.`
+          },
+          {
+            role: "user",
+            content: standard
+          }
+        ]
+      });
+
+      const parsed = JSON.parse(completion.choices[0].message.content);
+      res.json(parsed);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({});
+    }
+  });
+
+  // -----------------------------
   // Generate content with AI
   // -----------------------------
   app.post("/generate", async (req, res) => {
@@ -722,11 +765,11 @@ General rules:
 - Make the content look polished and ready to insert into Canvas immediately.
 
 Audience / support-level rules:
-- General: standard teacher-ready version
-- Below grade level: simpler language, more chunked steps, concrete examples, reduced cognitive load
-- Advanced: stronger rigor, extension thinking, challenge or enrichment opportunities
-- ELL support: vocabulary support, sentence frames, language scaffolds, simpler phrasing where helpful
-- IEP / scaffolded: step-by-step directions, built-in supports, check-ins, accommodations-friendly wording
+- Tier 1: Core Instruction for All Students = strong universal core instruction, grade-level access, clear explanations, broad accessibility
+- Tier 2: Targeted Interventions for Small Groups = small-group supports, targeted practice, guided reteach, focused scaffolds
+- Tier 3: Intensive Support for Individuals = highly scaffolded, explicit instruction, smaller steps, intensive supports, simplified task flow
+- IEP Support: Translation = translated/simplified language supports, clearer wording, language accessibility, supportive sentence structures
+- IEP Support: Scaffolded = accommodation-friendly wording, chunked tasks, check-ins, supports, guided progression
 
 Chunking rules by item type:
 
