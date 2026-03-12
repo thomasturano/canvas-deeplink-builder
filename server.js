@@ -140,6 +140,12 @@ lti.onDeepLinking(async (token, req, res) => {
           resize: vertical;
         }
 
+        .field-help {
+          margin-top: 6px;
+          font-size: 12px;
+          color: #64748b;
+        }
+
         .button-row {
           display: flex;
           gap: 12px;
@@ -352,7 +358,7 @@ lti.onDeepLinking(async (token, req, res) => {
             <div class="eyebrow">Canvas + AI</div>
             <h1>AI Curriculum Builder</h1>
             <p class="subtext">
-              Choose what you are creating, choose the audience/support level, generate chunked content, then insert only the sections you want into Canvas.
+              Choose what you are creating, set the audience/support level, type a standard, and the tool will auto-fill subject and year when it recognizes the standard.
             </p>
           </div>
 
@@ -382,7 +388,18 @@ lti.onDeepLinking(async (token, req, res) => {
 
               <div class="field field-full">
                 <label for="standard">Standard</label>
-                <input id="standard" placeholder="Ex: 6.RP.A.1" />
+                <input id="standard" placeholder="Ex: 6.RP.A.1" oninput="autoFillStandardMeta()" />
+                <div class="field-help">When recognized, the tool will auto-fill subject and year/grade.</div>
+              </div>
+
+              <div class="field">
+                <label for="subject">Subject</label>
+                <input id="subject" placeholder="Auto-filled from standard" />
+              </div>
+
+              <div class="field">
+                <label for="year">Year / Grade</label>
+                <input id="year" placeholder="Auto-filled from standard" />
               </div>
 
               <div class="field field-full">
@@ -427,6 +444,39 @@ lti.onDeepLinking(async (token, req, res) => {
         const selectAllEl = document.getElementById("selectAll");
 
         let generatedChunks = [];
+
+        const standardMap = {
+          "6.RP.A.1": { subject: "Math", year: "Grade 6" },
+          "6.RP.A.2": { subject: "Math", year: "Grade 6" },
+          "6.RP.A.3": { subject: "Math", year: "Grade 6" },
+          "6.NS.A.1": { subject: "Math", year: "Grade 6" },
+          "6.NS.A.2": { subject: "Math", year: "Grade 6" },
+          "6.NS.B.2": { subject: "Math", year: "Grade 6" },
+          "6.EE.A.1": { subject: "Math", year: "Grade 6" },
+          "6.EE.B.5": { subject: "Math", year: "Grade 6" },
+          "6.G.A.1": { subject: "Math", year: "Grade 6" },
+          "5.ESS.2.1": { subject: "Science", year: "Grade 5" },
+          "5.ESS.2.2": { subject: "Science", year: "Grade 5" },
+          "6.RI.1": { subject: "ELA", year: "Grade 6" },
+          "6.RI.2": { subject: "ELA", year: "Grade 6" },
+          "6.RL.1": { subject: "ELA", year: "Grade 6" },
+          "6.RL.2": { subject: "ELA", year: "Grade 6" }
+        };
+
+        function normalizeStandard(value) {
+          return value.trim().toUpperCase().replace(/\\s+/g, "");
+        }
+
+        function autoFillStandardMeta() {
+          const standard = normalizeStandard(document.getElementById("standard").value);
+          const subjectInput = document.getElementById("subject");
+          const yearInput = document.getElementById("year");
+
+          if (standardMap[standard]) {
+            subjectInput.value = standardMap[standard].subject;
+            yearInput.value = standardMap[standard].year;
+          }
+        }
 
         function setStatus(message, isError = false) {
           statusEl.textContent = message || "";
@@ -511,9 +561,11 @@ lti.onDeepLinking(async (token, req, res) => {
           const itemType = document.getElementById("itemType").value;
           const supportLevel = document.getElementById("supportLevel").value;
           const standard = document.getElementById("standard").value.trim();
+          const subject = document.getElementById("subject").value.trim();
+          const year = document.getElementById("year").value.trim();
           const prompt = document.getElementById("prompt").value.trim();
 
-          if (!itemType || !supportLevel || !standard || !prompt) {
+          if (!itemType || !supportLevel || !standard || !subject || !year || !prompt) {
             setStatus("Please complete all fields before generating.", true);
             return;
           }
@@ -525,7 +577,7 @@ lti.onDeepLinking(async (token, req, res) => {
             const res = await fetch("/generate", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ itemType, supportLevel, standard, prompt, ltik })
+              body: JSON.stringify({ itemType, supportLevel, standard, subject, year, prompt, ltik })
             });
 
             const text = await res.text();
@@ -630,7 +682,7 @@ lti.deploy({ port: PORT }).then(async () => {
   // -----------------------------
   app.post("/generate", async (req, res) => {
     try {
-      const { itemType, supportLevel, standard, prompt } = req.body;
+      const { itemType, supportLevel, standard, subject, year, prompt } = req.body;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -717,6 +769,8 @@ Formatting guidance:
             content: `Item type: ${itemType}
 Audience / Support level: ${supportLevel}
 Standard: ${standard}
+Subject: ${subject}
+Year / Grade: ${year}
 Teacher request: ${prompt}`
           }
         ]
@@ -725,9 +779,9 @@ Teacher request: ${prompt}`
       const raw = completion.choices[0].message.content;
 
       const cleaned = raw
-        .replace(/^```json\s*/i, "")
-        .replace(/^```\s*/i, "")
-        .replace(/\s*```$/i, "");
+        .replace(/^```json\\s*/i, "")
+        .replace(/^```\\s*/i, "")
+        .replace(/\\s*```$/i, "");
 
       const parsed = JSON.parse(cleaned);
 
