@@ -146,6 +146,17 @@ lti.onDeepLinking(async (token, req, res) => {
           color: #64748b;
         }
 
+        .inline-three {
+          display: grid;
+          grid-template-columns: 1.4fr 1fr 1fr;
+          gap: 18px;
+          align-items: end;
+        }
+
+        .inline-three .field {
+          margin-bottom: 0;
+        }
+
         .button-row {
           display: flex;
           gap: 12px;
@@ -156,12 +167,37 @@ lti.onDeepLinking(async (token, req, res) => {
         .bottom-actions {
           display: flex;
           justify-content: space-between;
-          align-items: center;
-          gap: 12px;
+          align-items: flex-end;
+          gap: 18px;
           flex-wrap: wrap;
           margin-top: 22px;
           padding-top: 18px;
           border-top: 1px solid #e2e8f0;
+        }
+
+        .translation-panel {
+          flex: 1 1 420px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .translation-toggle {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 14px;
+          font-weight: 600;
+          color: #0f172a;
+        }
+
+        .translation-options {
+          display: none;
+          max-width: 360px;
+        }
+
+        .translation-options.active {
+          display: block;
         }
 
         button {
@@ -348,6 +384,14 @@ lti.onDeepLinking(async (token, req, res) => {
           .form-grid {
             grid-template-columns: 1fr;
           }
+
+          .inline-three {
+            grid-template-columns: 1fr;
+          }
+
+          .bottom-actions {
+            align-items: stretch;
+          }
         }
       </style>
     </head>
@@ -355,7 +399,7 @@ lti.onDeepLinking(async (token, req, res) => {
       <div class="shell">
         <div class="card">
           <div class="header">
-            <div class="eyebrow">NEW!</div>
+            <div class="eyebrow">Canvas + AI</div>
             <h1>AI Curriculum Builder</h1>
             <p class="subtext">
               Choose what you are creating, select the audience/support level, type a standard, and the tool will try to auto-fill subject and year/grade using AI.
@@ -388,19 +432,24 @@ lti.onDeepLinking(async (token, req, res) => {
               </div>
 
               <div class="field field-full">
-                <label for="standard">Standard</label>
-                <input id="standard" placeholder="Ex: 6.RP.A.1" onblur="autoFillStandardMeta()" />
+                <div class="inline-three">
+                  <div class="field">
+                    <label for="standard">Standard</label>
+                    <input id="standard" placeholder="Ex: 6.RP.A.1" onblur="autoFillStandardMeta()" />
+                  </div>
+
+                  <div class="field">
+                    <label for="subject">Subject</label>
+                    <input id="subject" placeholder="Auto-filled from standard" />
+                  </div>
+
+                  <div class="field">
+                    <label for="year">Year / Grade</label>
+                    <input id="year" placeholder="Auto-filled from standard" />
+                  </div>
+                </div>
+
                 <div class="field-help">When recognized, the tool will auto-fill subject and year/grade. You can still edit them manually.</div>
-              </div>
-
-              <div class="field">
-                <label for="subject">Subject</label>
-                <input id="subject" placeholder="Auto-filled from standard" />
-              </div>
-
-              <div class="field">
-                <label for="year">Year / Grade</label>
-                <input id="year" placeholder="Auto-filled from standard" />
               </div>
 
               <div class="field field-full">
@@ -428,7 +477,28 @@ lti.onDeepLinking(async (token, req, res) => {
             <div id="emptyPreview" class="empty-preview">Nothing generated yet.</div>
 
             <div class="bottom-actions">
-              <div class="helper-note">Only checked sections will be inserted into Canvas.</div>
+              <div class="translation-panel">
+                <label class="translation-toggle">
+                  <input type="checkbox" id="translateBeforeInsert" onchange="toggleTranslationOptions()" />
+                  Translate selected content before inserting
+                </label>
+
+                <div id="translationOptions" class="translation-options">
+                  <div class="field">
+                    <label for="translationLanguage">Translation language</label>
+                    <select id="translationLanguage">
+                      <option value="Spanish">Spanish</option>
+                      <option value="Arabic">Arabic</option>
+                      <option value="Mandarin Chinese (Simplified)">Mandarin Chinese (Simplified)</option>
+                      <option value="Haitian Creole">Haitian Creole</option>
+                      <option value="Vietnamese">Vietnamese</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="helper-note">Only checked sections will be inserted into Canvas. Translation preserves the HTML structure.</div>
+              </div>
+
               <button id="insertBtn" class="secondary" onclick="insertIntoCanvas()">Insert Checked Into Canvas</button>
             </div>
           </div>
@@ -443,6 +513,8 @@ lti.onDeepLinking(async (token, req, res) => {
         const chunksEl = document.getElementById("chunks");
         const emptyPreviewEl = document.getElementById("emptyPreview");
         const selectAllEl = document.getElementById("selectAll");
+        const translateCheckboxEl = document.getElementById("translateBeforeInsert");
+        const translationOptionsEl = document.getElementById("translationOptions");
 
         let generatedChunks = [];
 
@@ -458,6 +530,14 @@ lti.onDeepLinking(async (token, req, res) => {
           } else {
             button.disabled = false;
             button.textContent = label;
+          }
+        }
+
+        function toggleTranslationOptions() {
+          if (translateCheckboxEl.checked) {
+            translationOptionsEl.classList.add("active");
+          } else {
+            translationOptionsEl.classList.remove("active");
           }
         }
 
@@ -616,11 +696,34 @@ lti.onDeepLinking(async (token, req, res) => {
             return;
           }
 
-          const html = selectedChunks.map(chunk => chunk.html).join("\\n<hr />\\n");
+          let html = selectedChunks.map(chunk => chunk.html).join("\\n<hr />\\n");
 
           try {
-            setStatus("Sending selected content back to Canvas...");
+            setStatus("Preparing content for Canvas...");
             setLoading(insertBtn, true, "Insert Checked Into Canvas");
+
+            if (translateCheckboxEl.checked) {
+              const language = document.getElementById("translationLanguage").value;
+
+              setStatus("Translating selected content to " + language + "...");
+
+              const translateRes = await fetch("/translate-content", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ html, language, ltik })
+              });
+
+              const translatedHtml = await translateRes.text();
+
+              if (!translateRes.ok) {
+                setStatus("Translation failed. Check your server logs.", true);
+                return;
+              }
+
+              html = translatedHtml;
+            }
+
+            setStatus("Sending selected content back to Canvas...");
 
             const res = await fetch("/return-deeplink", {
               method: "POST",
@@ -768,7 +871,7 @@ Audience / support-level rules:
 - Tier 1: Core Instruction for All Students = strong universal core instruction, grade-level access, clear explanations, broad accessibility
 - Tier 2: Targeted Interventions for Small Groups = small-group supports, targeted practice, guided reteach, focused scaffolds
 - Tier 3: Intensive Support for Individuals = highly scaffolded, explicit instruction, smaller steps, intensive supports, simplified task flow
-- IEP Support: Translation = translated/simplified language supports, clearer wording, language accessibility, supportive sentence structures
+- IEP Support: Translation = language-accessible wording and translation-friendly phrasing
 - IEP Support: Scaffolded = accommodation-friendly wording, chunked tasks, check-ins, supports, guided progression
 
 Chunking rules by item type:
@@ -832,6 +935,52 @@ Teacher request: ${prompt}`
     } catch (err) {
       console.error(err);
       res.status(500).send(JSON.stringify({ chunks: [] }));
+    }
+  });
+
+  // -----------------------------
+  // Translate selected content while preserving HTML
+  // -----------------------------
+  app.post("/translate-content", async (req, res) => {
+    try {
+      const { html, language } = req.body;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `Translate the provided HTML content into the requested language.
+
+Rules:
+- Preserve the HTML structure exactly.
+- Do not remove or add HTML tags unnecessarily.
+- Translate only the visible text content.
+- Do not use markdown.
+- Do not wrap the response in triple backticks.
+- Return ONLY raw HTML.`
+          },
+          {
+            role: "user",
+            content: `Target language: ${language}
+
+HTML to translate:
+${html}`
+          }
+        ]
+      });
+
+      const raw = completion.choices[0].message.content;
+
+      const cleaned = raw
+        .replace(/^```html\\s*/i, "")
+        .replace(/^```\\s*/i, "")
+        .replace(/\\s*```$/i, "");
+
+      res.send(cleaned);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send("Translation failed");
     }
   });
 
