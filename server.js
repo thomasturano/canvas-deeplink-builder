@@ -146,12 +146,27 @@ lti.onDeepLinking(async (token, req, res) => {
           color: #64748b;
         }
 
-        .inline-three {
-          display: grid;
-          grid-template-columns: 1.4fr 1fr 1fr;
-          gap: 18px;
-          align-items: end;
-        }
+.inline-three {
+  display: flex;
+  gap: 16px;
+}
+
+.inline-three .field {
+  flex: 1;
+}
+
+.inline-three .field:first-child {
+  flex: 1.6;
+}
+
+.inline-three {
+  flex-wrap: nowrap;
+}
+
+.inline-three .field:nth-child(2),
+.inline-three .field:nth-child(3) {
+  flex: .8;
+}
 
         .inline-three .field {
           margin-bottom: 0;
