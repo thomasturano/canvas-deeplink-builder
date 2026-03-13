@@ -57,7 +57,17 @@ function mapGradeToOakKeyStage(year) {
 function normalizeLessonList(lessonData) {
   if (!lessonData) return [];
 
-  if (Array.isArray(lessonData)) return lessonData;
+  // If Oak returns an array, it may be an array of units, not lessons
+  if (Array.isArray(lessonData)) {
+    // Case 1: top-level array of units with nested lessons
+    if (lessonData.length && Array.isArray(lessonData[0].lessons)) {
+      return lessonData.flatMap(unit => unit.lessons || []);
+    }
+
+    // Case 2: top-level array of lessons
+    return lessonData;
+  }
+
   if (Array.isArray(lessonData.lessons)) return lessonData.lessons;
   if (Array.isArray(lessonData.data)) return lessonData.data;
   if (Array.isArray(lessonData.results)) return lessonData.results;
