@@ -9,6 +9,140 @@ const openai = new OpenAI({
 const PORT = process.env.PORT || 3000;
 
 // -----------------------------
+// Oak helpers
+// -----------------------------
+async function oakFetch(path) {
+  const res = await fetch(`https://open-api.thenational.academy/api/v0${path}`, {
+    headers: {
+      Authorization: `Bearer ${process.env.OAK_API_KEY}`
+    }
+  });
+
+  if (!res.ok) {
+    throw new Error(`Oak API error: ${res.status} on ${path}`);
+  }
+
+  return await res.json();
+}
+
+function mapToOakSubject(subject) {
+  if (!subject) return null;
+
+  const s = subject.trim().toLowerCase();
+
+  if (s === "math" || s === "maths" || s === "mathematics") return "maths";
+  if (s === "ela" || s === "english language arts" || s === "english") return "english";
+  if (s === "science") return "science";
+  if (s === "social studies") return "history";
+
+  return null;
+}
+
+function mapGradeToOakKeyStage(year) {
+  if (!year) return null;
+
+  const match = String(year).match(/(\\d+)/);
+  if (!match) return null;
+
+  const grade = Number(match[1]);
+
+  if (grade >= 1 && grade <= 2) return "ks1";
+  if (grade >= 3 && grade <= 6) return "ks2";
+  if (grade >= 7 && grade <= 9) return "ks3";
+  if (grade >= 10 && grade <= 11) return "ks4";
+
+  return null;
+}
+
+async function buildOakContext(subject, year) {
+  const oakSubject = mapToOakSubject(subject);
+  const oakKeyStage = mapGradeToOakKeyStage(year);
+
+  if (!oakSubject || !oakKeyStage) {
+    return "No Oak context available.";
+  }
+
+  try {
+    const lessonData = await oakFetch(`/key-stages/${oakKeyStage}/subject/${oakSubject}/lessons`);
+
+    const lessons =
+      lessonData.lessons ||
+      lessonData.data ||
+      lessonData.results ||
+      lessonData.units?.flatMap(unit => unit.lessons || []) ||
+      [];
+
+    if (!Array.isArray(lessons) || lessons.length === 0) {
+      return "No Oak context available.";
+    }
+
+    const lessonSlugs = lessons
+      .map(l => l.lessonSlug || l.slug)
+      .filter(Boolean)
+      .slice(0, 2);
+
+    if (!lessonSlugs.length) {
+      return "No Oak context available.";
+    }
+
+    const summaries = [];
+
+    for (const slug of lessonSlugs) {
+      try {
+        const summary = await oakFetch(`/lessons/${slug}/summary`);
+        summaries.push(summary);
+      } catch (err) {
+        console.error("Oak summary fetch failed for", slug, err.message);
+      }
+    }
+
+    if (!summaries.length) {
+      return "No Oak context available.";
+    }
+
+    const contextParts = summaries.map((summary, index) => {
+      const lessonTitle = summary.lessonTitle || summary.title || "Untitled lesson";
+      const unitTitle = summary.unitTitle || summary.unit || "Unknown unit";
+
+      const keyLearningPoints = (summary.keyLearningPoints || [])
+        .map(item => item.keyLearningPoint || item)
+        .filter(Boolean)
+        .slice(0, 3);
+
+      const misconceptions = (summary.misconceptionsAndCommonMistakes || [])
+        .map(item => item.misconception || item)
+        .filter(Boolean)
+        .slice(0, 2);
+
+      const keywords = (summary.lessonKeywords || [])
+        .map(item => {
+          if (typeof item === "string") return item;
+          if (item.keyword && item.description) return `${item.keyword}: ${item.description}`;
+          return item.keyword || item.description;
+        })
+        .filter(Boolean)
+        .slice(0, 3);
+
+      return `
+Lesson ${index + 1}: ${lessonTitle}
+Unit: ${unitTitle}
+Keywords:
+${keywords.length ? keywords.map(k => `- ${k}`).join("\\n") : "- None provided"}
+Key learning points:
+${keyLearningPoints.length ? keyLearningPoints.map(p => `- ${p}`).join("\\n") : "- None provided"}
+Common misconceptions:
+${misconceptions.length ? misconceptions.map(m => `- ${m}`).join("\\n") : "- None provided"}
+      `.trim();
+    });
+
+    return contextParts.join("\\n\\n");
+  } catch (err) {
+    console.error("Oak context build failed:", err.message);
+    return "No Oak context available.";
+  }
+}
+
+// -----------------------------
 // LTI setup
 // -----------------------------
 lti.setup(
@@ -146,30 +280,19 @@ lti.onDeepLinking(async (token, req, res) => {
           color: #64748b;
         }
 
-.inline-three {
-  display: flex;
-  gap: 16px;
-}
-
-.inline-three .field {
-  flex: 1;
-}
-
-.inline-three .field:first-child {
-  flex: 1.6;
-}
-
-.inline-three {
-  flex-wrap: nowrap;
-}
-
-.inline-three .field:nth-child(2),
-.inline-three .field:nth-child(3) {
-  flex: .8;
-}
+        .inline-three {
+          display: flex;
+          gap: 16px;
+          flex-wrap: nowrap;
+        }
 
         .inline-three .field {
+          flex: 1;
           margin-bottom: 0;
+        }
+
+        .inline-three .field:first-child {
+          flex: 1.6;
         }
 
         .button-row {
@@ -402,6 +525,7 @@ lti.onDeepLinking(async (token, req, res) => {
 
           .inline-three {
             grid-template-columns: 1fr;
+            flex-wrap: wrap;
           }
 
           .bottom-actions {
@@ -414,10 +538,10 @@ lti.onDeepLinking(async (token, req, res) => {
       <div class="shell">
         <div class="card">
           <div class="header">
-            <div class="eyebrow">Canvas + AI</div>
+            <div class="eyebrow">Canvas + AI + Oak</div>
             <h1>AI Curriculum Builder</h1>
             <p class="subtext">
-              Choose what you are creating, select the audience/support level, type a standard, and the tool will try to auto-fill subject and year/grade using AI.
+              Choose what you are creating, select the audience/support level, type a standard, and the tool will try to auto-fill subject and year/grade using AI. When available, Oak National Academy curriculum context will be used as trusted reference material.
             </p>
           </div>
 
@@ -794,6 +918,16 @@ lti.deploy({ port: PORT }).then(async () => {
     res.send("Canvas Deep Link Builder is running.");
   });
 
+  app.get("/test-oak", async (req, res) => {
+    try {
+      const data = await oakFetch("/key-stages/ks2/subject/maths/lessons");
+      res.json(data);
+    } catch (err) {
+      console.error(err);
+      res.status(500).send(err.message);
+    }
+  });
+
   // -----------------------------
   // Detect subject + grade from standard using AI
   // -----------------------------
@@ -839,11 +973,13 @@ Rules:
   });
 
   // -----------------------------
-  // Generate content with AI
+  // Generate content with AI + Oak context
   // -----------------------------
   app.post("/generate", async (req, res) => {
     try {
       const { itemType, supportLevel, standard, subject, year, prompt } = req.body;
+
+      const oakContext = await buildOakContext(subject, year);
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -881,6 +1017,7 @@ General rules:
 - Keep titles short and teacher-friendly.
 - Make the chunks match the selected Canvas item type.
 - Make the content look polished and ready to insert into Canvas immediately.
+- When Oak curriculum context is provided, use it as trusted reference material for vocabulary, misconceptions, and practice design, but still tailor the final output to the teacher’s requested Canvas item type and support level.
 
 Audience / support-level rules:
 - Tier 1: Core Instruction for All Students = strong universal core instruction, grade-level access, clear explanations, broad accessibility
@@ -932,7 +1069,12 @@ Audience / Support level: ${supportLevel}
 Standard: ${standard}
 Subject: ${subject}
 Year / Grade: ${year}
-Teacher request: ${prompt}`
+Teacher request: ${prompt}
+
+Use the following Oak National Academy curriculum context as trusted reference material when it is relevant. Align vocabulary, examples, misconceptions, and practice opportunities to it where appropriate.
+
+Oak context:
+${oakContext}`
           }
         ]
       });
