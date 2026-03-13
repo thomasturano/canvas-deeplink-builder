@@ -271,15 +271,25 @@ function assetTitle(type) {
 
 async function fetchOakAssetToCanvasChunk(canvasBaseUrl, courseId, lessonSlug, lessonTitle, unitTitle, type) {
   try {
+    console.log(`OAK ASSET START: ${lessonSlug} (${type})`);
+    console.log("CANVAS BASE URL:", canvasBaseUrl);
+    console.log("COURSE ID:", courseId);
+    console.log("HAS CANVAS TOKEN:", Boolean(process.env.CANVAS_API_TOKEN));
+
     const assetRes = await oakFetch(`/lessons/${lessonSlug}/assets/${type}`);
     const contentType = assetRes.headers.get("content-type") || "application/octet-stream";
+
     const fallbackName =
       type === "video"
         ? `${lessonSlug}-oak-video.mp4`
         : `${lessonSlug}-oak-slide-deck`;
 
     const filename = fileNameFromHeaders(assetRes.headers, fallbackName);
+    console.log(`OAK ASSET FILENAME (${type}):`, filename);
+    console.log(`OAK ASSET CONTENT TYPE (${type}):`, contentType);
+
     const buffer = Buffer.from(await assetRes.arrayBuffer());
+    console.log(`OAK ASSET BUFFER SIZE (${type}):`, buffer.length);
 
     const uploadedFile = await uploadBufferToCanvas(
       canvasBaseUrl,
@@ -289,12 +299,14 @@ async function fetchOakAssetToCanvasChunk(canvasBaseUrl, courseId, lessonSlug, l
       contentType
     );
 
+    console.log(`CANVAS UPLOAD SUCCESS (${type}):`, uploadedFile?.id, uploadedFile?.display_name, uploadedFile?.url);
+
     return {
       title: assetTitle(type),
       html: buildCanvasHostedHtml(uploadedFile, assetTitle(type), lessonTitle, unitTitle)
     };
   } catch (err) {
-    console.error(`Oak asset upload failed for ${lessonSlug} (${type}):`, err.message);
+    console.error(`OAK ASSET UPLOAD FAILED (${type}) for ${lessonSlug}:`, err.message);
     return null;
   }
 }
