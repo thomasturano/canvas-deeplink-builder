@@ -47,7 +47,7 @@ function mapToOakSubject(subject) {
 function mapGradeToOakKeyStage(year) {
   if (!year) return null;
 
-  const match = String(year).match(/(\\d+)/);
+  const match = String(year).match(/(\d+)/);
   if (!match) return null;
 
   const grade = Number(match[1]);
@@ -63,6 +63,7 @@ function mapGradeToOakKeyStage(year) {
 function normalizeLessonList(lessonData) {
   if (!lessonData) return [];
 
+  // Oak often returns an array of units, each containing nested lessons
   if (Array.isArray(lessonData)) {
     if (lessonData.length && Array.isArray(lessonData[0].lessons)) {
       return lessonData.flatMap(unit => unit.lessons || []);
@@ -278,15 +279,15 @@ async function buildOakBundle(subject, year, baseUrl) {
 Lesson ${index + 1}: ${lessonTitle}
 Unit: ${unitTitle}
 Keywords:
-${keywords.length ? keywords.map(k => `- ${k}`).join("\\n") : "- None provided"}
+${keywords.length ? keywords.map(k => `- ${k}`).join("\n") : "- None provided"}
 Key learning points:
-${keyLearningPoints.length ? keyLearningPoints.map(p => `- ${p}`).join("\\n") : "- None provided"}
+${keyLearningPoints.length ? keyLearningPoints.map(p => `- ${p}`).join("\n") : "- None provided"}
 Common misconceptions:
-${misconceptions.length ? misconceptions.map(m => `- ${m}`).join("\\n") : "- None provided"}
+${misconceptions.length ? misconceptions.map(m => `- ${m}`).join("\n") : "- None provided"}
       `.trim();
     });
 
-    const context = contextParts.join("\\n\\n");
+    const context = contextParts.join("\n\n");
 
     const extraChunks = [];
     for (const { lesson } of summaries) {
@@ -354,7 +355,7 @@ lti.setup(
   }
 );
 
-// Make public asset proxy accessible outside LTI launch
+// public route for embedded Oak assets
 lti.whitelist("/oak-asset");
 
 // -----------------------------
@@ -1065,9 +1066,7 @@ lti.deploy({ port: PORT }).then(async () => {
     res.send("Canvas Deep Link Builder is running.");
   });
 
-  // -----------------------------
-  // Public Oak asset proxy for embedding
-  // -----------------------------
+  // Public Oak asset proxy
   app.get("/oak-asset", async (req, res) => {
     try {
       const lesson = req.query.lesson;
@@ -1098,9 +1097,6 @@ lti.deploy({ port: PORT }).then(async () => {
     }
   });
 
-  // -----------------------------
-  // Detect subject + grade from standard using AI
-  // -----------------------------
   app.post("/detect-standard", async (req, res) => {
     try {
       const { standard } = req.body;
@@ -1142,9 +1138,6 @@ Rules:
     }
   });
 
-  // -----------------------------
-  // Generate content with AI + Oak context + embedded Oak assets
-  // -----------------------------
   app.post("/generate", async (req, res) => {
     try {
       const { itemType, supportLevel, standard, subject, year, prompt } = req.body;
@@ -1254,9 +1247,9 @@ ${oakResult.context}`
       const raw = completion.choices[0].message.content;
 
       const cleaned = raw
-        .replace(/^\\\`\\\`\\\`json\\s*/i, "")
-        .replace(/^\\\`\\\`\\\`\\s*/i, "")
-        .replace(/\\s*\\\`\\\`\\\`$/i, "");
+        .replace(/^```json\\s*/i, "")
+        .replace(/^```\\s*/i, "")
+        .replace(/\\s*```$/i, "");
 
       const parsed = JSON.parse(cleaned);
       const finalChunks = [...(parsed.chunks || []), ...(oakResult.extraChunks || [])];
@@ -1271,9 +1264,6 @@ ${oakResult.context}`
     }
   });
 
-  // -----------------------------
-  // Translate selected content while preserving HTML
-  // -----------------------------
   app.post("/translate-content", async (req, res) => {
     try {
       const { html, language } = req.body;
@@ -1317,9 +1307,6 @@ ${html}`
     }
   });
 
-  // -----------------------------
-  // Return deep link to Canvas
-  // -----------------------------
   app.post("/return-deeplink", async (req, res) => {
     try {
       const html = req.body.html || "<p>No content generated</p>";
