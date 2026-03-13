@@ -981,6 +981,8 @@ Rules:
 
       const oakContext = await buildOakContext(subject, year);
 
+      console.log("OAK CONTEXT:", oakContext);
+
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         response_format: { type: "json_object" },
