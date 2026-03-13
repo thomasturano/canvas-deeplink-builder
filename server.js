@@ -57,14 +57,11 @@ function mapGradeToOakKeyStage(year) {
 function normalizeLessonList(lessonData) {
   if (!lessonData) return [];
 
-  // If Oak returns an array, it may be an array of units, not lessons
+  // Oak often returns top-level arrays of units, each with nested lessons
   if (Array.isArray(lessonData)) {
-    // Case 1: top-level array of units with nested lessons
     if (lessonData.length && Array.isArray(lessonData[0].lessons)) {
       return lessonData.flatMap(unit => unit.lessons || []);
     }
-
-    // Case 2: top-level array of lessons
     return lessonData;
   }
 
@@ -79,7 +76,88 @@ function normalizeLessonList(lessonData) {
   return [];
 }
 
-async function buildOakContext(subject, year) {
+function extractUrlDeep(value) {
+  if (!value) return null;
+
+  if (typeof value === "string" && /^https?:\/\//i.test(value)) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extractUrlDeep(item);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  if (typeof value === "object") {
+    const preferredKeys = [
+      "downloadUrl",
+      "signedUrl",
+      "url",
+      "href",
+      "assetUrl",
+      "downloadHref"
+    ];
+
+    for (const key of preferredKeys) {
+      if (value[key] && typeof value[key] === "string" && /^https?:\/\//i.test(value[key])) {
+        return value[key];
+      }
+    }
+
+    for (const val of Object.values(value)) {
+      const found = extractUrlDeep(val);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
+function assetTitle(type) {
+  if (type === "slideDeck") return "Oak Slide Deck";
+  if (type === "video") return "Oak Lesson Video";
+  return "Oak Resource";
+}
+
+function assetChunkHtml(type, lessonTitle, unitTitle, url) {
+  const heading = assetTitle(type);
+  const description =
+    type === "slideDeck"
+      ? "A curriculum-aligned slide deck is available from Oak for this lesson."
+      : "A curriculum-aligned lesson video is available from Oak for this lesson.";
+
+  return `
+<section>
+  <h2>${heading}</h2>
+  <p>${description}</p>
+  <p><strong>Lesson:</strong> ${lessonTitle || "Oak lesson"}</p>
+  <p><strong>Unit:</strong> ${unitTitle || "Oak unit"}</p>
+  <p><a href="${url}" target="_blank" rel="noopener noreferrer">Open ${heading}</a></p>
+</section>
+  `.trim();
+}
+
+async function fetchLessonAssetChunk(lessonSlug, lessonTitle, unitTitle, type) {
+  try {
+    const assetData = await oakFetch(`/lessons/${lessonSlug}/assets?type=${type}`);
+    const url = extractUrlDeep(assetData);
+
+    if (!url) return null;
+
+    return {
+      title: assetTitle(type),
+      html: assetChunkHtml(type, lessonTitle, unitTitle, url)
+    };
+  } catch (err) {
+    console.error(`Oak asset fetch failed for ${lessonSlug} (${type}):`, err.message);
+    return null;
+  }
+}
+
+async function buildOakBundle(subject, year) {
   const oakSubject = mapToOakSubject(subject);
   const oakKeyStage = mapGradeToOakKeyStage(year);
 
@@ -92,7 +170,8 @@ async function buildOakContext(subject, year) {
     console.log("OAK MAPPING FAILED");
     return {
       used: false,
-      context: "No Oak context available."
+      context: "No Oak context available.",
+      extraChunks: []
     };
   }
 
@@ -117,46 +196,53 @@ async function buildOakContext(subject, year) {
     if (!lessons.length) {
       return {
         used: false,
-        context: "No Oak context available."
+        context: "No Oak context available.",
+        extraChunks: []
       };
     }
 
-    const lessonSlugs = lessons
-      .map(l => l.lessonSlug || l.slug)
-      .filter(Boolean)
+    const selectedLessons = lessons
+      .map(l => ({
+        lessonSlug: l.lessonSlug || l.slug,
+        lessonTitle: l.lessonTitle || l.title || "Untitled lesson",
+        unitTitle: l.unitTitle || l.unitTitleDisplay || l.unit || "Unknown unit"
+      }))
+      .filter(l => l.lessonSlug)
       .slice(0, 2);
 
-    console.log("OAK LESSON SLUGS:", lessonSlugs);
+    console.log("OAK LESSON SLUGS:", selectedLessons.map(l => l.lessonSlug));
 
-    if (!lessonSlugs.length) {
+    if (!selectedLessons.length) {
       return {
         used: false,
-        context: "No Oak context available."
+        context: "No Oak context available.",
+        extraChunks: []
       };
     }
 
     const summaries = [];
 
-    for (const slug of lessonSlugs) {
+    for (const lesson of selectedLessons) {
       try {
-        const summary = await oakFetch(`/lessons/${slug}/summary`);
-        console.log("OAK SUMMARY SUCCESS FOR:", slug);
-        summaries.push(summary);
+        const summary = await oakFetch(`/lessons/${lesson.lessonSlug}/summary`);
+        console.log("OAK SUMMARY SUCCESS FOR:", lesson.lessonSlug);
+        summaries.push({ lesson, summary });
       } catch (err) {
-        console.error("Oak summary fetch failed for", slug, err.message);
+        console.error("Oak summary fetch failed for", lesson.lessonSlug, err.message);
       }
     }
 
     if (!summaries.length) {
       return {
         used: false,
-        context: "No Oak context available."
+        context: "No Oak context available.",
+        extraChunks: []
       };
     }
 
-    const contextParts = summaries.map((summary, index) => {
-      const lessonTitle = summary.lessonTitle || summary.title || "Untitled lesson";
-      const unitTitle = summary.unitTitle || summary.unit || "Unknown unit";
+    const contextParts = summaries.map(({ lesson, summary }, index) => {
+      const lessonTitle = summary.lessonTitle || lesson.lessonTitle || summary.title || "Untitled lesson";
+      const unitTitle = summary.unitTitle || lesson.unitTitle || summary.unit || "Unknown unit";
 
       const keyLearningPoints = (summary.keyLearningPoints || [])
         .map(item => item.keyLearningPoint || item)
@@ -190,17 +276,52 @@ ${misconceptions.length ? misconceptions.map(m => `- ${m}`).join("\n") : "- None
     });
 
     const context = contextParts.join("\n\n");
+
+    // Try to add one slide deck chunk and one video chunk from the first lesson with assets
+    const extraChunks = [];
+    for (const { lesson } of summaries) {
+      if (!extraChunks.find(c => c.title === "Oak Slide Deck")) {
+        const slideChunk = await fetchLessonAssetChunk(
+          lesson.lessonSlug,
+          lesson.lessonTitle,
+          lesson.unitTitle,
+          "slideDeck"
+        );
+        if (slideChunk) extraChunks.push(slideChunk);
+      }
+
+      if (!extraChunks.find(c => c.title === "Oak Lesson Video")) {
+        const videoChunk = await fetchLessonAssetChunk(
+          lesson.lessonSlug,
+          lesson.lessonTitle,
+          lesson.unitTitle,
+          "video"
+        );
+        if (videoChunk) extraChunks.push(videoChunk);
+      }
+
+      if (
+        extraChunks.find(c => c.title === "Oak Slide Deck") &&
+        extraChunks.find(c => c.title === "Oak Lesson Video")
+      ) {
+        break;
+      }
+    }
+
     console.log("OAK CONTEXT BUILT SUCCESSFULLY");
+    console.log("OAK EXTRA CHUNKS:", extraChunks.map(c => c.title));
 
     return {
       used: true,
-      context
+      context,
+      extraChunks
     };
   } catch (err) {
     console.error("Oak context build failed:", err.message);
     return {
       used: false,
-      context: "No Oak context available."
+      context: "No Oak context available.",
+      extraChunks: []
     };
   }
 }
@@ -627,7 +748,7 @@ lti.onDeepLinking(async (token, req, res) => {
             <div class="eyebrow">Canvas + AI + Oak</div>
             <h1>AI Curriculum Builder</h1>
             <p class="subtext">
-              Choose what you are creating, select the audience/support level, type a standard, and the tool will try to auto-fill subject and year/grade using AI. When available, Oak National Academy curriculum context will be used as trusted reference material.
+              Choose what you are creating, select the audience/support level, type a standard, and the tool will try to auto-fill subject and year/grade using AI. When available, Oak National Academy curriculum context and lesson resources will be used as trusted reference material.
             </p>
           </div>
 
@@ -1070,13 +1191,13 @@ Rules:
   });
 
   // -----------------------------
-  // Generate content with AI + Oak context
+  // Generate content with AI + Oak context + Oak asset chunks
   // -----------------------------
   app.post("/generate", async (req, res) => {
     try {
       const { itemType, supportLevel, standard, subject, year, prompt } = req.body;
 
-      const oakResult = await buildOakContext(subject, year);
+      const oakResult = await buildOakBundle(subject, year);
       console.log("OAK CONTEXT:", oakResult.context);
 
       const completion = await openai.chat.completions.create({
@@ -1186,8 +1307,10 @@ ${oakResult.context}`
 
       const parsed = JSON.parse(cleaned);
 
+      const finalChunks = [...(parsed.chunks || []), ...(oakResult.extraChunks || [])];
+
       res.json({
-        chunks: parsed.chunks || [],
+        chunks: finalChunks,
         oakUsed: oakResult.used
       });
     } catch (err) {
