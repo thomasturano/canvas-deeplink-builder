@@ -30,8 +30,8 @@ function mapToOakSubject(subject) {
 
   const s = subject.trim().toLowerCase();
 
-  if (s === "math" || s === "maths" || s === "mathematics") return "maths";
-  if (s === "ela" || s === "english language arts" || s === "english") return "english";
+  if (["math", "maths", "mathematics"].includes(s)) return "maths";
+  if (["ela", "english language arts", "english"].includes(s)) return "english";
   if (s === "science") return "science";
   if (s === "social studies") return "history";
 
@@ -41,7 +41,7 @@ function mapToOakSubject(subject) {
 function mapGradeToOakKeyStage(year) {
   if (!year) return null;
 
-  const match = String(year).match(/(\\d+)/);
+  const match = String(year).match(/(\d+)/);
   if (!match) return null;
 
   const grade = Number(match[1]);
@@ -54,26 +54,61 @@ function mapGradeToOakKeyStage(year) {
   return null;
 }
 
+function normalizeLessonList(lessonData) {
+  if (!lessonData) return [];
+
+  if (Array.isArray(lessonData)) return lessonData;
+  if (Array.isArray(lessonData.lessons)) return lessonData.lessons;
+  if (Array.isArray(lessonData.data)) return lessonData.data;
+  if (Array.isArray(lessonData.results)) return lessonData.results;
+
+  if (Array.isArray(lessonData.units)) {
+    return lessonData.units.flatMap(unit => unit.lessons || []);
+  }
+
+  return [];
+}
+
 async function buildOakContext(subject, year) {
   const oakSubject = mapToOakSubject(subject);
   const oakKeyStage = mapGradeToOakKeyStage(year);
 
+  console.log("OAK INPUT SUBJECT:", subject);
+  console.log("OAK INPUT YEAR:", year);
+  console.log("OAK MAPPED SUBJECT:", oakSubject);
+  console.log("OAK MAPPED KEY STAGE:", oakKeyStage);
+
   if (!oakSubject || !oakKeyStage) {
-    return "No Oak context available.";
+    console.log("OAK MAPPING FAILED");
+    return {
+      used: false,
+      context: "No Oak context available."
+    };
   }
 
   try {
-    const lessonData = await oakFetch(`/key-stages/${oakKeyStage}/subject/${oakSubject}/lessons`);
+    const path = `/key-stages/${oakKeyStage}/subject/${oakSubject}/lessons`;
+    console.log("OAK REQUEST PATH:", path);
 
-    const lessons =
-      lessonData.lessons ||
-      lessonData.data ||
-      lessonData.results ||
-      lessonData.units?.flatMap(unit => unit.lessons || []) ||
-      [];
+    const lessonData = await oakFetch(path);
 
-    if (!Array.isArray(lessons) || lessons.length === 0) {
-      return "No Oak context available.";
+    console.log("OAK RAW RESPONSE TYPE:", Array.isArray(lessonData) ? "array" : typeof lessonData);
+    console.log(
+      "OAK RAW RESPONSE KEYS:",
+      lessonData && typeof lessonData === "object" && !Array.isArray(lessonData)
+        ? Object.keys(lessonData)
+        : "no keys"
+    );
+    console.log("OAK RAW RESPONSE SAMPLE:", JSON.stringify(lessonData).slice(0, 1200));
+
+    const lessons = normalizeLessonList(lessonData);
+    console.log("OAK PARSED LESSON COUNT:", lessons.length);
+
+    if (!lessons.length) {
+      return {
+        used: false,
+        context: "No Oak context available."
+      };
     }
 
     const lessonSlugs = lessons
@@ -81,8 +116,13 @@ async function buildOakContext(subject, year) {
       .filter(Boolean)
       .slice(0, 2);
 
+    console.log("OAK LESSON SLUGS:", lessonSlugs);
+
     if (!lessonSlugs.length) {
-      return "No Oak context available.";
+      return {
+        used: false,
+        context: "No Oak context available."
+      };
     }
 
     const summaries = [];
@@ -90,6 +130,7 @@ async function buildOakContext(subject, year) {
     for (const slug of lessonSlugs) {
       try {
         const summary = await oakFetch(`/lessons/${slug}/summary`);
+        console.log("OAK SUMMARY SUCCESS FOR:", slug);
         summaries.push(summary);
       } catch (err) {
         console.error("Oak summary fetch failed for", slug, err.message);
@@ -97,7 +138,10 @@ async function buildOakContext(subject, year) {
     }
 
     if (!summaries.length) {
-      return "No Oak context available.";
+      return {
+        used: false,
+        context: "No Oak context available."
+      };
     }
 
     const contextParts = summaries.map((summary, index) => {
@@ -127,18 +171,27 @@ async function buildOakContext(subject, year) {
 Lesson ${index + 1}: ${lessonTitle}
 Unit: ${unitTitle}
 Keywords:
-${keywords.length ? keywords.map(k => `- ${k}`).join("\\n") : "- None provided"}
+${keywords.length ? keywords.map(k => `- ${k}`).join("\n") : "- None provided"}
 Key learning points:
-${keyLearningPoints.length ? keyLearningPoints.map(p => `- ${p}`).join("\\n") : "- None provided"}
+${keyLearningPoints.length ? keyLearningPoints.map(p => `- ${p}`).join("\n") : "- None provided"}
 Common misconceptions:
-${misconceptions.length ? misconceptions.map(m => `- ${m}`).join("\\n") : "- None provided"}
+${misconceptions.length ? misconceptions.map(m => `- ${m}`).join("\n") : "- None provided"}
       `.trim();
     });
 
-    return contextParts.join("\\n\\n");
+    const context = contextParts.join("\n\n");
+    console.log("OAK CONTEXT BUILT SUCCESSFULLY");
+
+    return {
+      used: true,
+      context
+    };
   } catch (err) {
     console.error("Oak context build failed:", err.message);
-    return "No Oak context available.";
+    return {
+      used: false,
+      context: "No Oak context available."
+    };
   }
 }
 
@@ -397,9 +450,33 @@ lti.onDeepLinking(async (token, req, res) => {
           flex-wrap: wrap;
         }
 
+        .preview-title-wrap {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
         .preview-title {
           font-size: 15px;
           font-weight: 700;
+        }
+
+        .oak-indicator {
+          width: 12px;
+          height: 12px;
+          border-radius: 999px;
+          background: #cbd5e1;
+          box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+        }
+
+        .oak-indicator.active {
+          background: #16a34a;
+          box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
+        }
+
+        .oak-label {
+          font-size: 12px;
+          color: #64748b;
         }
 
         .select-all-wrap {
@@ -524,7 +601,6 @@ lti.onDeepLinking(async (token, req, res) => {
           }
 
           .inline-three {
-            grid-template-columns: 1fr;
             flex-wrap: wrap;
           }
 
@@ -605,7 +681,12 @@ lti.onDeepLinking(async (token, req, res) => {
             <div id="status" class="status"></div>
 
             <div class="preview-header">
-              <div class="preview-title">Preview</div>
+              <div class="preview-title-wrap">
+                <div class="preview-title">Preview</div>
+                <div id="oakIndicator" class="oak-indicator"></div>
+                <div id="oakLabel" class="oak-label">Oak not used</div>
+              </div>
+
               <label class="select-all-wrap">
                 <input type="checkbox" id="selectAll" onchange="toggleAllChunks(this.checked)" />
                 Select all
@@ -654,6 +735,8 @@ lti.onDeepLinking(async (token, req, res) => {
         const selectAllEl = document.getElementById("selectAll");
         const translateCheckboxEl = document.getElementById("translateBeforeInsert");
         const translationOptionsEl = document.getElementById("translationOptions");
+        const oakIndicatorEl = document.getElementById("oakIndicator");
+        const oakLabelEl = document.getElementById("oakLabel");
 
         let generatedChunks = [];
 
@@ -669,6 +752,16 @@ lti.onDeepLinking(async (token, req, res) => {
           } else {
             button.disabled = false;
             button.textContent = label;
+          }
+        }
+
+        function setOakIndicator(used) {
+          if (used) {
+            oakIndicatorEl.classList.add("active");
+            oakLabelEl.textContent = "Oak used";
+          } else {
+            oakIndicatorEl.classList.remove("active");
+            oakLabelEl.textContent = "Oak not used";
           }
         }
 
@@ -717,6 +810,7 @@ lti.onDeepLinking(async (token, req, res) => {
           emptyPreviewEl.style.display = "block";
           emptyPreviewEl.textContent = "Nothing generated yet.";
           selectAllEl.checked = false;
+          setOakIndicator(false);
           setStatus("");
         }
 
@@ -791,6 +885,7 @@ lti.onDeepLinking(async (token, req, res) => {
           try {
             setStatus("Generating chunked content...");
             setLoading(generateBtn, true, "Generate");
+            setOakIndicator(false);
 
             const res = await fetch("/generate", {
               method: "POST",
@@ -816,12 +911,14 @@ lti.onDeepLinking(async (token, req, res) => {
             }));
 
             renderChunks();
+            setOakIndicator(Boolean(parsed.oakUsed));
             setStatus("Content generated successfully.");
           } catch (err) {
             console.error(err);
             setStatus("Generate failed. Please try again.", true);
             emptyPreviewEl.style.display = "block";
             emptyPreviewEl.textContent = "Generation failed.";
+            setOakIndicator(false);
           } finally {
             setLoading(generateBtn, false, "Generate");
           }
@@ -918,16 +1015,6 @@ lti.deploy({ port: PORT }).then(async () => {
     res.send("Canvas Deep Link Builder is running.");
   });
 
-  app.get("/test-oak", async (req, res) => {
-    try {
-      const data = await oakFetch("/key-stages/ks2/subject/maths/lessons");
-      res.json(data);
-    } catch (err) {
-      console.error(err);
-      res.status(500).send(err.message);
-    }
-  });
-
   // -----------------------------
   // Detect subject + grade from standard using AI
   // -----------------------------
@@ -979,9 +1066,8 @@ Rules:
     try {
       const { itemType, supportLevel, standard, subject, year, prompt } = req.body;
 
-      const oakContext = await buildOakContext(subject, year);
-
-      console.log("OAK CONTEXT:", oakContext);
+      const oakResult = await buildOakContext(subject, year);
+      console.log("OAK CONTEXT:", oakResult.context);
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -1076,7 +1162,7 @@ Teacher request: ${prompt}
 Use the following Oak National Academy curriculum context as trusted reference material when it is relevant. Align vocabulary, examples, misconceptions, and practice opportunities to it where appropriate.
 
 Oak context:
-${oakContext}`
+${oakResult.context}`
           }
         ]
       });
@@ -1090,10 +1176,13 @@ ${oakContext}`
 
       const parsed = JSON.parse(cleaned);
 
-      res.json(parsed);
+      res.json({
+        chunks: parsed.chunks || [],
+        oakUsed: oakResult.used
+      });
     } catch (err) {
       console.error(err);
-      res.status(500).send(JSON.stringify({ chunks: [] }));
+      res.status(500).send(JSON.stringify({ chunks: [], oakUsed: false }));
     }
   });
 
