@@ -23,7 +23,8 @@ function normalizeCourseId(value) {
   return match ? match[1] : null;
 }
 
-function buildAppBaseUrl(req) {
+function buildCanvasBaseUrl(token, req) {
+  if (token?.iss && /^https?:\/\//i.test(token.iss)) return token.iss;
   const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
   return `${proto}://${req.get("host")}`;
 }
@@ -57,7 +58,8 @@ async function canvasFetch(canvasBaseUrl, path, options = {}) {
 async function canvasJson(canvasBaseUrl, path, options = {}) {
   const res = await canvasFetch(canvasBaseUrl, path, options);
   if (!res.ok) {
-    throw new Error(`Canvas API error ${res.status} on ${path}`);
+    const text = await res.text();
+    throw new Error(`Canvas API error ${res.status} on ${path}: ${text}`);
   }
   return res.json();
 }
@@ -68,9 +70,11 @@ async function getCourseRootFolderId(canvasBaseUrl, courseId) {
 }
 
 async function uploadBufferToCanvas(canvasBaseUrl, courseId, filename, buffer, contentType) {
-  const rootFolderId = await getCourseRootFolderId(canvasBaseUrl, courseId);
+  console.log("CANVAS UPLOAD START:", { courseId, filename, contentType, size: buffer.length });
 
-  // Step 1: tell Canvas about the upload
+  const rootFolderId = await getCourseRootFolderId(canvasBaseUrl, courseId);
+  console.log("CANVAS ROOT FOLDER ID:", rootFolderId);
+
   const formBody = new URLSearchParams();
   formBody.set("name", filename);
   formBody.set("size", String(buffer.length));
@@ -89,11 +93,19 @@ async function uploadBufferToCanvas(canvasBaseUrl, courseId, filename, buffer, c
     }
   );
 
+  const initText = await initRes.text();
+
   if (!initRes.ok) {
-    throw new Error(`Canvas upload init failed: ${initRes.status}`);
+    throw new Error(`Canvas upload init failed: ${initRes.status} ${initText}`);
   }
 
-  const initJson = await initRes.json();
+  let initJson;
+  try {
+    initJson = JSON.parse(initText);
+  } catch {
+    throw new Error(`Canvas upload init response was not JSON: ${initText}`);
+  }
+
   const uploadUrl = initJson.upload_url;
   const uploadParams = initJson.upload_params || {};
 
@@ -101,7 +113,6 @@ async function uploadBufferToCanvas(canvasBaseUrl, courseId, filename, buffer, c
     throw new Error("Canvas upload_url missing");
   }
 
-  // Step 2: upload bytes to returned upload_url
   const fd = new FormData();
   Object.entries(uploadParams).forEach(([k, v]) => fd.append(k, v));
   fd.append("file", new Blob([buffer], { type: contentType || "application/octet-stream" }), filename);
@@ -112,17 +123,24 @@ async function uploadBufferToCanvas(canvasBaseUrl, courseId, filename, buffer, c
     redirect: "follow"
   });
 
+  const uploadText = await uploadRes.text();
+
   if (!uploadRes.ok) {
-    throw new Error(`Canvas upload POST failed: ${uploadRes.status}`);
+    throw new Error(`Canvas upload POST failed: ${uploadRes.status} ${uploadText}`);
   }
 
-  const text = await uploadRes.text();
   let uploaded;
   try {
-    uploaded = JSON.parse(text);
+    uploaded = JSON.parse(uploadText);
   } catch {
-    throw new Error("Canvas upload response was not JSON");
+    throw new Error(`Canvas upload response was not JSON: ${uploadText}`);
   }
+
+  console.log("CANVAS UPLOAD COMPLETE:", {
+    id: uploaded?.id,
+    display_name: uploaded?.display_name,
+    url: uploaded?.url
+  });
 
   return uploaded;
 }
@@ -131,7 +149,7 @@ function buildCanvasHostedHtml(file, title, lessonTitle, unitTitle) {
   const fileUrl = file.url;
   const fileId = file.id;
   const displayName = file.display_name || file.filename || title;
-  const contentType = file["content-type"] || "";
+  const contentType = file["content-type"] || file.content_type || "";
   const lowerName = displayName.toLowerCase();
 
   if (contentType.startsWith("video/")) {
@@ -150,7 +168,6 @@ function buildCanvasHostedHtml(file, title, lessonTitle, unitTitle) {
     `.trim();
   }
 
-  // PDF/document preview
   if (contentType.includes("pdf") || lowerName.endsWith(".pdf")) {
     return `
 <section>
@@ -172,7 +189,6 @@ function buildCanvasHostedHtml(file, title, lessonTitle, unitTitle) {
     `.trim();
   }
 
-  // Fallback Canvas file link
   return `
 <section>
   <h2>${title}</h2>
@@ -205,7 +221,8 @@ async function oakFetch(path, options = {}) {
   });
 
   if (!res.ok) {
-    throw new Error(`Oak API error: ${res.status} on ${path}`);
+    const text = await res.text();
+    throw new Error(`Oak API error: ${res.status} on ${path}: ${text}`);
   }
 
   return res;
@@ -220,6 +237,7 @@ function mapToOakSubject(subject) {
   if (!subject) return null;
 
   const s = subject.trim().toLowerCase();
+
   if (["math", "maths", "mathematics"].includes(s)) return "maths";
   if (["ela", "english language arts", "english"].includes(s)) return "english";
   if (s === "science") return "science";
@@ -230,10 +248,12 @@ function mapToOakSubject(subject) {
 
 function mapGradeToOakKeyStage(year) {
   if (!year) return null;
+
   const match = String(year).match(/(\d+)/);
   if (!match) return null;
 
   const grade = Number(match[1]);
+
   if (grade >= 1 && grade <= 2) return "ks1";
   if (grade >= 3 && grade <= 6) return "ks2";
   if (grade >= 7 && grade <= 9) return "ks3";
@@ -321,6 +341,7 @@ async function buildOakBundle(subject, year, canvasBaseUrl, courseId) {
   console.log("OAK MAPPED KEY STAGE:", oakKeyStage);
 
   if (!oakSubject || !oakKeyStage) {
+    console.log("OAK MAPPING FAILED");
     return { used: false, context: "No Oak context available.", extraChunks: [] };
   }
 
@@ -329,6 +350,7 @@ async function buildOakBundle(subject, year, canvasBaseUrl, courseId) {
     console.log("OAK REQUEST PATH:", path);
 
     const lessonData = await oakFetchJson(path);
+
     console.log("OAK RAW RESPONSE TYPE:", Array.isArray(lessonData) ? "array" : typeof lessonData);
     console.log("OAK RAW RESPONSE SAMPLE:", JSON.stringify(lessonData).slice(0, 1200));
 
@@ -351,12 +373,14 @@ async function buildOakBundle(subject, year, canvasBaseUrl, courseId) {
     }
 
     const summaries = [];
+
     for (const lesson of selectedLessons) {
       try {
         const summary = await oakFetchJson(`/lessons/${lesson.lessonSlug}/summary`);
+        console.log("OAK SUMMARY SUCCESS FOR:", lesson.lessonSlug);
         summaries.push({ lesson, summary });
       } catch (err) {
-        console.error("Oak summary fetch failed for", lesson.lessonSlug, err.message);
+        console.error("OAK SUMMARY FAILED FOR:", lesson.lessonSlug, err.message);
       }
     }
 
@@ -389,6 +413,7 @@ ${misconceptions.length ? misconceptions.map(m => `- ${m}`).join("\n") : "- None
     }).join("\n\n");
 
     const extraChunks = [];
+
     if (canvasBaseUrl && courseId) {
       for (const { lesson } of summaries) {
         if (!extraChunks.find(c => c.title === "Oak Slide Deck")) {
@@ -418,9 +443,15 @@ ${misconceptions.length ? misconceptions.map(m => `- ${m}`).join("\n") : "- None
         if (
           extraChunks.find(c => c.title === "Oak Slide Deck") &&
           extraChunks.find(c => c.title === "Oak Lesson Video")
-        ) break;
+        ) {
+          break;
+        }
       }
+    } else {
+      console.log("SKIPPING OAK ASSET UPLOAD: missing canvasBaseUrl or courseId");
     }
+
+    console.log("OAK EXTRA CHUNKS:", extraChunks.map(c => c.title));
 
     return {
       used: true,
@@ -453,7 +484,7 @@ lti.setup(
 lti.onDeepLinking(async (token, req, res) => {
   const contextClaim = getClaim(token, "https://purl.imsglobal.org/spec/lti/claim/context", {});
   const courseId = normalizeCourseId(contextClaim.id);
-  const canvasBaseUrl = token?.iss || process.env.CANVAS_BASE_URL || "";
+  const canvasBaseUrl = buildCanvasBaseUrl(token, req);
 
   res.send(`
 <!DOCTYPE html>
@@ -878,7 +909,7 @@ lti.onDeepLinking(async (token, req, res) => {
 });
 
 // -----------------------------
-// Deploy LTI provider
+// Deploy routes
 // -----------------------------
 lti.deploy({ port: PORT }).then(async () => {
   const app = lti.app;
@@ -933,6 +964,9 @@ Return JSON only in this exact format:
   app.post("/generate", async (req, res) => {
     try {
       const { itemType, supportLevel, standard, subject, year, prompt, courseId, canvasBaseUrl } = req.body;
+
+      console.log("GENERATE COURSE ID:", courseId);
+      console.log("GENERATE CANVAS BASE URL:", canvasBaseUrl);
 
       const oakResult = await buildOakBundle(subject, year, canvasBaseUrl, courseId);
 
@@ -1032,7 +1066,6 @@ ${html}`
   app.post("/return-deeplink", async (req, res) => {
     try {
       const html = req.body.html || "<p>No content generated</p>";
-
       const items = [{ type: "html", html }];
 
       const form = await lti.DeepLinking.createDeepLinkingForm(
