@@ -934,7 +934,7 @@ lti.deploy({ port: PORT }).then(async () => {
   const app = lti.app;
 
   await lti.registerPlatform({
-    url: "https://canvas.instructure.com",
+    url: "https://cclayton.instructure.com",
     name: "Canvas",
     clientId: "131630000000000243",
     authenticationEndpoint: "https://sso.canvaslms.com/api/lti/authorize_redirect",
