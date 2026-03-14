@@ -23,6 +23,12 @@ function normalizeCourseId(value) {
   return match ? match[1] : null;
 }
 
+function extractCourseIdFromUrl(url) {
+  if (!url) return null;
+  const match = String(url).match(/\/courses\/(\d+)/);
+  return match ? match[1] : null;
+}
+
 function buildCanvasBaseUrl(token, req) {
   if (token?.iss && /^https?:\/\//i.test(token.iss)) return token.iss;
   const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
@@ -484,15 +490,18 @@ lti.setup(
 lti.onDeepLinking(async (token, req, res) => {
   const contextClaim = getClaim(token, "https://purl.imsglobal.org/spec/lti/claim/context", {});
   const customClaim = getClaim(token, "https://purl.imsglobal.org/spec/lti/claim/custom", {});
+  const referrer = req.headers.referer || req.headers.referrer || "";
 
   const courseId =
     normalizeCourseId(customClaim.canvas_course_id) ||
-    normalizeCourseId(contextClaim.id);
+    normalizeCourseId(contextClaim.id) ||
+    extractCourseIdFromUrl(referrer);
 
   const canvasBaseUrl = buildCanvasBaseUrl(token, req);
 
   console.log("LAUNCH CUSTOM CLAIM:", customClaim);
   console.log("LAUNCH CONTEXT CLAIM:", contextClaim);
+  console.log("LAUNCH REFERRER:", referrer);
   console.log("LAUNCH COURSE ID:", courseId);
 
   res.send(`
@@ -682,6 +691,7 @@ lti.onDeepLinking(async (token, req, res) => {
   const ltik = new URLSearchParams(window.location.search).get("ltik");
   const courseId = ${JSON.stringify(courseId)};
   const canvasBaseUrl = ${JSON.stringify(canvasBaseUrl)};
+  const launchReferrer = ${JSON.stringify(referrer)};
 
   const generateBtn = document.getElementById("generateBtn");
   const insertBtn = document.getElementById("insertBtn");
@@ -822,7 +832,7 @@ lti.onDeepLinking(async (token, req, res) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          itemType, supportLevel, standard, subject, year, prompt, ltik, courseId, canvasBaseUrl
+          itemType, supportLevel, standard, subject, year, prompt, ltik, courseId, canvasBaseUrl, launchReferrer
         })
       });
 
@@ -972,10 +982,15 @@ Return JSON only in this exact format:
 
   app.post("/generate", async (req, res) => {
     try {
-      const { itemType, supportLevel, standard, subject, year, prompt, courseId, canvasBaseUrl } = req.body;
+      let { itemType, supportLevel, standard, subject, year, prompt, courseId, canvasBaseUrl, launchReferrer } = req.body;
+
+      if (!courseId && launchReferrer) {
+        courseId = extractCourseIdFromUrl(launchReferrer);
+      }
 
       console.log("GENERATE COURSE ID:", courseId);
       console.log("GENERATE CANVAS BASE URL:", canvasBaseUrl);
+      console.log("GENERATE REFERRER:", launchReferrer);
 
       const oakResult = await buildOakBundle(subject, year, canvasBaseUrl, courseId);
 
