@@ -483,8 +483,17 @@ lti.setup(
 // -----------------------------
 lti.onDeepLinking(async (token, req, res) => {
   const contextClaim = getClaim(token, "https://purl.imsglobal.org/spec/lti/claim/context", {});
-  const courseId = normalizeCourseId(contextClaim.id);
+  const customClaim = getClaim(token, "https://purl.imsglobal.org/spec/lti/claim/custom", {});
+
+  const courseId =
+    normalizeCourseId(customClaim.canvas_course_id) ||
+    normalizeCourseId(contextClaim.id);
+
   const canvasBaseUrl = buildCanvasBaseUrl(token, req);
+
+  console.log("LAUNCH CUSTOM CLAIM:", customClaim);
+  console.log("LAUNCH CONTEXT CLAIM:", contextClaim);
+  console.log("LAUNCH COURSE ID:", courseId);
 
   res.send(`
 <!DOCTYPE html>
