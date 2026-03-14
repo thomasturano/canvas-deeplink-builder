@@ -29,11 +29,10 @@ function extractCourseIdFromUrl(url) {
   return match ? match[1] : null;
 }
 
-function buildCanvasBaseUrl(token, req) {
+function buildCanvasBaseUrl() {
   if (process.env.CANVAS_BASE_URL) {
     return process.env.CANVAS_BASE_URL.replace(/\/$/, "");
   }
-
   return "https://cclayton.instructure.com";
 }
 
@@ -499,12 +498,13 @@ lti.onDeepLinking(async (token, req, res) => {
     normalizeCourseId(contextClaim.id) ||
     extractCourseIdFromUrl(referrer);
 
-  const canvasBaseUrl = buildCanvasBaseUrl(token, req);
+  const canvasBaseUrl = buildCanvasBaseUrl();
 
   console.log("LAUNCH CUSTOM CLAIM:", customClaim);
   console.log("LAUNCH CONTEXT CLAIM:", contextClaim);
   console.log("LAUNCH REFERRER:", referrer);
   console.log("LAUNCH COURSE ID:", courseId);
+  console.log("LAUNCH CANVAS BASE URL:", canvasBaseUrl);
 
   res.send(`
 <!DOCTYPE html>
@@ -990,11 +990,13 @@ Return JSON only in this exact format:
         courseId = extractCourseIdFromUrl(launchReferrer);
       }
 
+      const resolvedCanvasBaseUrl = buildCanvasBaseUrl();
+
       console.log("GENERATE COURSE ID:", courseId);
-      console.log("GENERATE CANVAS BASE URL:", canvasBaseUrl);
+      console.log("GENERATE CANVAS BASE URL:", resolvedCanvasBaseUrl);
       console.log("GENERATE REFERRER:", launchReferrer);
 
-      const oakResult = await buildOakBundle(subject, year, canvasBaseUrl, courseId);
+      const oakResult = await buildOakBundle(subject, year, resolvedCanvasBaseUrl, courseId);
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
