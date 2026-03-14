@@ -30,9 +30,11 @@ function extractCourseIdFromUrl(url) {
 }
 
 function buildCanvasBaseUrl(token, req) {
-  if (token?.iss && /^https?:\/\//i.test(token.iss)) return token.iss;
-  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
-  return `${proto}://${req.get("host")}`;
+  if (process.env.CANVAS_BASE_URL) {
+    return process.env.CANVAS_BASE_URL.replace(/\/$/, "");
+  }
+
+  return "https://cclayton.instructure.com";
 }
 
 function fileNameFromHeaders(headers, fallback) {
