@@ -7,6 +7,9 @@ const openai = new OpenAI({
 });
 
 const PORT = process.env.PORT || 3000;
+const TEST_CANVAS_COURSE_ID = "1";
+const FIXED_CANVAS_BASE_URL =
+  (process.env.CANVAS_BASE_URL || "https://cclayton.instructure.com").replace(/\/$/, "");
 
 // -----------------------------
 // Generic helpers
@@ -30,10 +33,7 @@ function extractCourseIdFromUrl(url) {
 }
 
 function buildCanvasBaseUrl() {
-  if (process.env.CANVAS_BASE_URL) {
-    return process.env.CANVAS_BASE_URL.replace(/\/$/, "");
-  }
-  return "https://cclayton.instructure.com";
+  return FIXED_CANVAS_BASE_URL;
 }
 
 function fileNameFromHeaders(headers, fallback) {
@@ -171,6 +171,9 @@ function buildCanvasHostedHtml(file, title, lessonTitle, unitTitle) {
       Your browser does not support embedded video.
     </video>
   </div>
+  <p style="margin-top:10px;">
+    <a href="${fileUrl}" target="_blank" rel="noopener noreferrer">Open ${displayName}</a>
+  </p>
 </section>
     `.trim();
   }
@@ -248,7 +251,7 @@ function mapToOakSubject(subject) {
   if (["math", "maths", "mathematics"].includes(s)) return "maths";
   if (["ela", "english language arts", "english"].includes(s)) return "english";
   if (s === "science") return "science";
-  if (s === "social studies") return "history";
+  if (["social studies", "history"].includes(s)) return "history";
 
   return null;
 }
@@ -256,7 +259,8 @@ function mapToOakSubject(subject) {
 function mapGradeToOakKeyStage(year) {
   if (!year) return null;
 
-  const match = String(year).match(/(\d+)/);
+  const str = String(year).trim().toLowerCase();
+  const match = str.match(/(\d+)/);
   if (!match) return null;
 
   const grade = Number(match[1]);
@@ -368,7 +372,7 @@ async function buildOakBundle(subject, year, canvasBaseUrl, courseId) {
       .map(l => ({
         lessonSlug: l.lessonSlug || l.slug,
         lessonTitle: l.lessonTitle || l.title || "Untitled lesson",
-        unitTitle: l.unitTitle || l.unitTitleDisplay || l.unit || "Unknown unit"
+        unitTitle: l.unitTitle || l.unit || "Unknown unit"
       }))
       .filter(l => l.lessonSlug)
       .slice(0, 2);
@@ -493,17 +497,19 @@ lti.onDeepLinking(async (token, req, res) => {
   const customClaim = getClaim(token, "https://purl.imsglobal.org/spec/lti/claim/custom", {});
   const referrer = req.headers.referer || req.headers.referrer || "";
 
-  const courseId =
+  const detectedCourseId =
     normalizeCourseId(customClaim.canvas_course_id) ||
     normalizeCourseId(contextClaim.id) ||
     extractCourseIdFromUrl(referrer);
 
+  const courseId = TEST_CANVAS_COURSE_ID;
   const canvasBaseUrl = buildCanvasBaseUrl();
 
   console.log("LAUNCH CUSTOM CLAIM:", customClaim);
   console.log("LAUNCH CONTEXT CLAIM:", contextClaim);
   console.log("LAUNCH REFERRER:", referrer);
-  console.log("LAUNCH COURSE ID:", courseId);
+  console.log("LAUNCH DETECTED COURSE ID:", detectedCourseId);
+  console.log("LAUNCH FORCED COURSE ID:", courseId);
   console.log("LAUNCH CANVAS BASE URL:", canvasBaseUrl);
 
   res.send(`
@@ -583,7 +589,7 @@ lti.onDeepLinking(async (token, req, res) => {
       <div class="header">
         <div class="eyebrow">Canvas + AI + Oak</div>
         <h1>AI Curriculum Builder</h1>
-        <p class="subtext">When available, Oak resources are uploaded into Canvas so they can preview and embed as Canvas-hosted assets.</p>
+        <p class="subtext">This build is currently forcing Oak asset uploads into Canvas course ID ${courseId} for embed testing.</p>
       </div>
 
       <div class="content">
@@ -617,12 +623,10 @@ lti.onDeepLinking(async (token, req, res) => {
                 <label for="standard">Standard</label>
                 <input id="standard" placeholder="Ex: 6.RP.A.1" onblur="autoFillStandardMeta()" />
               </div>
-
               <div class="field">
                 <label for="subject">Subject</label>
                 <input id="subject" placeholder="Auto-filled from standard" />
               </div>
-
               <div class="field">
                 <label for="year">Year / Grade</label>
                 <input id="year" placeholder="Auto-filled from standard" />
@@ -834,7 +838,16 @@ lti.onDeepLinking(async (token, req, res) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          itemType, supportLevel, standard, subject, year, prompt, ltik, courseId, canvasBaseUrl, launchReferrer
+          itemType,
+          supportLevel,
+          standard,
+          subject,
+          year,
+          prompt,
+          ltik,
+          courseId,
+          canvasBaseUrl,
+          launchReferrer
         })
       });
 
@@ -984,19 +997,22 @@ Return JSON only in this exact format:
 
   app.post("/generate", async (req, res) => {
     try {
-      let { itemType, supportLevel, standard, subject, year, prompt, courseId, canvasBaseUrl, launchReferrer } = req.body;
+      let { itemType, supportLevel, standard, subject, year, prompt, courseId, launchReferrer } = req.body;
 
-      if (!courseId && launchReferrer) {
-        courseId = extractCourseIdFromUrl(launchReferrer);
-      }
+      const detectedCourseId =
+        courseId ||
+        extractCourseIdFromUrl(launchReferrer) ||
+        TEST_CANVAS_COURSE_ID;
 
       const resolvedCanvasBaseUrl = buildCanvasBaseUrl();
 
-      console.log("GENERATE COURSE ID:", courseId);
-      console.log("GENERATE CANVAS BASE URL:", resolvedCanvasBaseUrl);
+      console.log("GENERATE RECEIVED COURSE ID:", courseId);
       console.log("GENERATE REFERRER:", launchReferrer);
+      console.log("GENERATE FORCED COURSE ID:", TEST_CANVAS_COURSE_ID);
+      console.log("GENERATE FINAL COURSE ID:", detectedCourseId);
+      console.log("GENERATE CANVAS BASE URL:", resolvedCanvasBaseUrl);
 
-      const oakResult = await buildOakBundle(subject, year, resolvedCanvasBaseUrl, courseId);
+      const oakResult = await buildOakBundle(subject, year, resolvedCanvasBaseUrl, detectedCourseId);
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -1038,9 +1054,9 @@ ${oakResult.context}`
 
       const raw = completion.choices[0].message.content;
       const cleaned = raw
-        .replace(/^```json\\s*/i, "")
-        .replace(/^```\\s*/i, "")
-        .replace(/\\s*```$/i, "");
+        .replace(/^\\\`\\\`\\\`json\\s*/i, "")
+        .replace(/^\\\`\\\`\\\`\\s*/i, "")
+        .replace(/\\s*\\\`\\\`\\\`$/i, "");
 
       const parsed = JSON.parse(cleaned);
       const finalChunks = [...(parsed.chunks || []), ...(oakResult.extraChunks || [])];
@@ -1080,9 +1096,9 @@ ${html}`
 
       const raw = completion.choices[0].message.content;
       const cleaned = raw
-        .replace(/^```html\\s*/i, "")
-        .replace(/^```\\s*/i, "")
-        .replace(/\\s*```$/i, "");
+        .replace(/^\\\`\\\`\\\`html\\s*/i, "")
+        .replace(/^\\\`\\\`\\\`\\s*/i, "")
+        .replace(/\\s*\\\`\\\`\\\`$/i, "");
 
       res.send(cleaned);
     } catch (err) {
