@@ -11,23 +11,17 @@ const PORT = process.env.PORT || 3000;
 // -----------------------------
 // Oak helpers
 // -----------------------------
-async function oakFetch(path, options = {}) {
+async function oakFetch(path) {
   const res = await fetch(`https://open-api.thenational.academy/api/v0${path}`, {
     headers: {
       Authorization: `Bearer ${process.env.OAK_API_KEY}`
-    },
-    ...options
+    }
   });
 
   if (!res.ok) {
     throw new Error(`Oak API error: ${res.status} on ${path}`);
   }
 
-  return res;
-}
-
-async function oakFetchJson(path) {
-  const res = await oakFetch(path);
   return await res.json();
 }
 
@@ -36,8 +30,8 @@ function mapToOakSubject(subject) {
 
   const s = subject.trim().toLowerCase();
 
-  if (["math", "maths", "mathematics"].includes(s)) return "maths";
-  if (["ela", "english language arts", "english"].includes(s)) return "english";
+  if (s === "math" || s === "maths" || s === "mathematics") return "maths";
+  if (s === "ela" || s === "english language arts" || s === "english") return "english";
   if (s === "science") return "science";
   if (s === "social studies") return "history";
 
@@ -47,7 +41,7 @@ function mapToOakSubject(subject) {
 function mapGradeToOakKeyStage(year) {
   if (!year) return null;
 
-  const match = String(year).match(/(\d+)/);
+  const match = String(year).match(/(\\d+)/);
   if (!match) return null;
 
   const grade = Number(match[1]);
@@ -60,201 +54,55 @@ function mapGradeToOakKeyStage(year) {
   return null;
 }
 
-function normalizeLessonList(lessonData) {
-  if (!lessonData) return [];
-
-  // Oak often returns an array of units, each containing nested lessons
-  if (Array.isArray(lessonData)) {
-    if (lessonData.length && Array.isArray(lessonData[0].lessons)) {
-      return lessonData.flatMap(unit => unit.lessons || []);
-    }
-    return lessonData;
-  }
-
-  if (Array.isArray(lessonData.lessons)) return lessonData.lessons;
-  if (Array.isArray(lessonData.data)) return lessonData.data;
-  if (Array.isArray(lessonData.results)) return lessonData.results;
-
-  if (Array.isArray(lessonData.units)) {
-    return lessonData.units.flatMap(unit => unit.lessons || []);
-  }
-
-  return [];
-}
-
-function buildAppBaseUrl(req) {
-  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
-  return `${proto}://${req.get("host")}`;
-}
-
-function assetTitle(type) {
-  if (type === "slideDeck") return "Oak Slide Deck";
-  if (type === "video") return "Oak Lesson Video";
-  return "Oak Resource";
-}
-
-function buildOakProxyUrl(baseUrl, lessonSlug, type) {
-  return `${baseUrl}/oak-asset?lesson=${encodeURIComponent(lessonSlug)}&type=${encodeURIComponent(type)}`;
-}
-
-function assetEmbedHtml(type, lessonTitle, unitTitle, embedUrl) {
-  const heading = assetTitle(type);
-
-  if (type === "video") {
-    return `
-<section>
-  <h2>${heading}</h2>
-  <p><strong>Lesson:</strong> ${lessonTitle || "Oak lesson"}</p>
-  <p><strong>Unit:</strong> ${unitTitle || "Oak unit"}</p>
-  <div style="margin-top:12px;">
-    <video controls preload="metadata" style="width:100%; max-width:100%; border-radius:12px; background:#000;">
-      <source src="${embedUrl}">
-      Your browser does not support embedded video. <a href="${embedUrl}" target="_blank" rel="noopener noreferrer">Open the video</a>.
-    </video>
-  </div>
-</section>
-    `.trim();
-  }
-
-  return `
-<section>
-  <h2>${heading}</h2>
-  <p><strong>Lesson:</strong> ${lessonTitle || "Oak lesson"}</p>
-  <p><strong>Unit:</strong> ${unitTitle || "Oak unit"}</p>
-  <div style="margin-top:12px; border:1px solid #cbd5e1; border-radius:12px; overflow:hidden; background:#fff;">
-    <iframe
-      src="${embedUrl}"
-      title="${heading}"
-      style="width:100%; height:520px; border:0;"
-      loading="lazy">
-    </iframe>
-  </div>
-  <p style="margin-top:10px;">
-    If the deck does not preview in this browser, <a href="${embedUrl}" target="_blank" rel="noopener noreferrer">open it in a new tab</a>.
-  </p>
-</section>
-  `.trim();
-}
-
-async function lessonHasAsset(lessonSlug, type) {
-  try {
-    const assetData = await oakFetchJson(`/lessons/${lessonSlug}/assets?type=${type}`);
-
-    if (Array.isArray(assetData) && assetData.length) return true;
-    if (Array.isArray(assetData.assets) && assetData.assets.length) return true;
-    if (Array.isArray(assetData.results) && assetData.results.length) return true;
-    if (Array.isArray(assetData.data) && assetData.data.length) return true;
-
-    if (assetData && typeof assetData === "object") {
-      const str = JSON.stringify(assetData).toLowerCase();
-      return str.includes(type.toLowerCase());
-    }
-
-    return false;
-  } catch (err) {
-    console.error(`Oak asset availability check failed for ${lessonSlug} (${type}):`, err.message);
-    return false;
-  }
-}
-
-async function fetchLessonAssetChunk(baseUrl, lessonSlug, lessonTitle, unitTitle, type) {
-  const available = await lessonHasAsset(lessonSlug, type);
-  if (!available) return null;
-
-  const embedUrl = buildOakProxyUrl(baseUrl, lessonSlug, type);
-
-  return {
-    title: assetTitle(type),
-    html: assetEmbedHtml(type, lessonTitle, unitTitle, embedUrl)
-  };
-}
-
-async function buildOakBundle(subject, year, baseUrl) {
+async function buildOakContext(subject, year) {
   const oakSubject = mapToOakSubject(subject);
   const oakKeyStage = mapGradeToOakKeyStage(year);
 
-  console.log("OAK INPUT SUBJECT:", subject);
-  console.log("OAK INPUT YEAR:", year);
-  console.log("OAK MAPPED SUBJECT:", oakSubject);
-  console.log("OAK MAPPED KEY STAGE:", oakKeyStage);
-
   if (!oakSubject || !oakKeyStage) {
-    console.log("OAK MAPPING FAILED");
-    return {
-      used: false,
-      context: "No Oak context available.",
-      extraChunks: []
-    };
+    return "No Oak context available.";
   }
 
   try {
-    const path = `/key-stages/${oakKeyStage}/subject/${oakSubject}/lessons`;
-    console.log("OAK REQUEST PATH:", path);
+    const lessonData = await oakFetch(`/key-stages/${oakKeyStage}/subject/${oakSubject}/lessons`);
 
-    const lessonData = await oakFetchJson(path);
+    const lessons =
+      lessonData.lessons ||
+      lessonData.data ||
+      lessonData.results ||
+      lessonData.units?.flatMap(unit => unit.lessons || []) ||
+      [];
 
-    console.log("OAK RAW RESPONSE TYPE:", Array.isArray(lessonData) ? "array" : typeof lessonData);
-    console.log(
-      "OAK RAW RESPONSE KEYS:",
-      lessonData && typeof lessonData === "object" && !Array.isArray(lessonData)
-        ? Object.keys(lessonData)
-        : "no keys"
-    );
-    console.log("OAK RAW RESPONSE SAMPLE:", JSON.stringify(lessonData).slice(0, 1200));
-
-    const lessons = normalizeLessonList(lessonData);
-    console.log("OAK PARSED LESSON COUNT:", lessons.length);
-
-    if (!lessons.length) {
-      return {
-        used: false,
-        context: "No Oak context available.",
-        extraChunks: []
-      };
+    if (!Array.isArray(lessons) || lessons.length === 0) {
+      return "No Oak context available.";
     }
 
-    const selectedLessons = lessons
-      .map(l => ({
-        lessonSlug: l.lessonSlug || l.slug,
-        lessonTitle: l.lessonTitle || l.title || "Untitled lesson",
-        unitTitle: l.unitTitle || l.unitTitleDisplay || l.unit || "Unknown unit"
-      }))
-      .filter(l => l.lessonSlug)
+    const lessonSlugs = lessons
+      .map(l => l.lessonSlug || l.slug)
+      .filter(Boolean)
       .slice(0, 2);
 
-    console.log("OAK LESSON SLUGS:", selectedLessons.map(l => l.lessonSlug));
-
-    if (!selectedLessons.length) {
-      return {
-        used: false,
-        context: "No Oak context available.",
-        extraChunks: []
-      };
+    if (!lessonSlugs.length) {
+      return "No Oak context available.";
     }
 
     const summaries = [];
 
-    for (const lesson of selectedLessons) {
+    for (const slug of lessonSlugs) {
       try {
-        const summary = await oakFetchJson(`/lessons/${lesson.lessonSlug}/summary`);
-        console.log("OAK SUMMARY SUCCESS FOR:", lesson.lessonSlug);
-        summaries.push({ lesson, summary });
+        const summary = await oakFetch(`/lessons/${slug}/summary`);
+        summaries.push(summary);
       } catch (err) {
-        console.error("Oak summary fetch failed for", lesson.lessonSlug, err.message);
+        console.error("Oak summary fetch failed for", slug, err.message);
       }
     }
 
     if (!summaries.length) {
-      return {
-        used: false,
-        context: "No Oak context available.",
-        extraChunks: []
-      };
+      return "No Oak context available.";
     }
 
-    const contextParts = summaries.map(({ lesson, summary }, index) => {
-      const lessonTitle = summary.lessonTitle || lesson.lessonTitle || summary.title || "Untitled lesson";
-      const unitTitle = summary.unitTitle || lesson.unitTitle || summary.unit || "Unknown unit";
+    const contextParts = summaries.map((summary, index) => {
+      const lessonTitle = summary.lessonTitle || summary.title || "Untitled lesson";
+      const unitTitle = summary.unitTitle || summary.unit || "Unknown unit";
 
       const keyLearningPoints = (summary.keyLearningPoints || [])
         .map(item => item.keyLearningPoint || item)
@@ -279,63 +127,18 @@ async function buildOakBundle(subject, year, baseUrl) {
 Lesson ${index + 1}: ${lessonTitle}
 Unit: ${unitTitle}
 Keywords:
-${keywords.length ? keywords.map(k => `- ${k}`).join("\n") : "- None provided"}
+${keywords.length ? keywords.map(k => `- ${k}`).join("\\n") : "- None provided"}
 Key learning points:
-${keyLearningPoints.length ? keyLearningPoints.map(p => `- ${p}`).join("\n") : "- None provided"}
+${keyLearningPoints.length ? keyLearningPoints.map(p => `- ${p}`).join("\\n") : "- None provided"}
 Common misconceptions:
-${misconceptions.length ? misconceptions.map(m => `- ${m}`).join("\n") : "- None provided"}
+${misconceptions.length ? misconceptions.map(m => `- ${m}`).join("\\n") : "- None provided"}
       `.trim();
     });
 
-    const context = contextParts.join("\n\n");
-
-    const extraChunks = [];
-    for (const { lesson } of summaries) {
-      if (!extraChunks.find(c => c.title === "Oak Slide Deck")) {
-        const slideChunk = await fetchLessonAssetChunk(
-          baseUrl,
-          lesson.lessonSlug,
-          lesson.lessonTitle,
-          lesson.unitTitle,
-          "slideDeck"
-        );
-        if (slideChunk) extraChunks.push(slideChunk);
-      }
-
-      if (!extraChunks.find(c => c.title === "Oak Lesson Video")) {
-        const videoChunk = await fetchLessonAssetChunk(
-          baseUrl,
-          lesson.lessonSlug,
-          lesson.lessonTitle,
-          lesson.unitTitle,
-          "video"
-        );
-        if (videoChunk) extraChunks.push(videoChunk);
-      }
-
-      if (
-        extraChunks.find(c => c.title === "Oak Slide Deck") &&
-        extraChunks.find(c => c.title === "Oak Lesson Video")
-      ) {
-        break;
-      }
-    }
-
-    console.log("OAK CONTEXT BUILT SUCCESSFULLY");
-    console.log("OAK EXTRA CHUNKS:", extraChunks.map(c => c.title));
-
-    return {
-      used: true,
-      context,
-      extraChunks
-    };
+    return contextParts.join("\\n\\n");
   } catch (err) {
     console.error("Oak context build failed:", err.message);
-    return {
-      used: false,
-      context: "No Oak context available.",
-      extraChunks: []
-    };
+    return "No Oak context available.";
   }
 }
 
@@ -355,9 +158,6 @@ lti.setup(
   }
 );
 
-// public route for embedded Oak assets
-lti.whitelist("/oak-asset");
-
 // -----------------------------
 // Deep linking UI
 // -----------------------------
@@ -369,7 +169,10 @@ lti.onDeepLinking(async (token, req, res) => {
       <title>AI Curriculum Builder</title>
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <style>
-        * { box-sizing: border-box; }
+        * {
+          box-sizing: border-box;
+        }
+
         body {
           margin: 0;
           font-family: Inter, Arial, sans-serif;
@@ -377,7 +180,12 @@ lti.onDeepLinking(async (token, req, res) => {
           color: #0f172a;
           padding: 24px;
         }
-        .shell { max-width: 1040px; margin: 0 auto; }
+
+        .shell {
+          max-width: 1040px;
+          margin: 0 auto;
+        }
+
         .card {
           background: rgba(255, 255, 255, 0.96);
           border: 1px solid #e2e8f0;
@@ -385,11 +193,13 @@ lti.onDeepLinking(async (token, req, res) => {
           box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
           overflow: hidden;
         }
+
         .header {
           padding: 28px 30px 18px 30px;
           border-bottom: 1px solid #e2e8f0;
           background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
         }
+
         .eyebrow {
           display: inline-block;
           padding: 6px 10px;
@@ -400,11 +210,13 @@ lti.onDeepLinking(async (token, req, res) => {
           font-weight: 700;
           margin-bottom: 12px;
         }
+
         h1 {
           margin: 0 0 8px 0;
           font-size: 30px;
           line-height: 1.1;
         }
+
         .subtext {
           margin: 0;
           color: #475569;
@@ -412,14 +224,22 @@ lti.onDeepLinking(async (token, req, res) => {
           line-height: 1.5;
           max-width: 860px;
         }
-        .content { padding: 24px 30px 30px 30px; }
+
+        .content {
+          padding: 24px 30px 30px 30px;
+        }
+
         .form-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 18px;
           margin-bottom: 18px;
         }
-        .field-full { grid-column: 1 / -1; }
+
+        .field-full {
+          grid-column: 1 / -1;
+        }
+
         .field label {
           display: block;
           font-size: 14px;
@@ -427,6 +247,7 @@ lti.onDeepLinking(async (token, req, res) => {
           margin-bottom: 8px;
           color: #0f172a;
         }
+
         .field input,
         .field textarea,
         .field select {
@@ -440,30 +261,47 @@ lti.onDeepLinking(async (token, req, res) => {
           outline: none;
           transition: all 0.18s ease;
         }
+
         .field input:focus,
         .field textarea:focus,
         .field select:focus {
           border-color: #2563eb;
           box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
         }
-        .field textarea { min-height: 140px; resize: vertical; }
-        .field-help { margin-top: 6px; font-size: 12px; color: #64748b; }
+
+        .field textarea {
+          min-height: 140px;
+          resize: vertical;
+        }
+
+        .field-help {
+          margin-top: 6px;
+          font-size: 12px;
+          color: #64748b;
+        }
+
         .inline-three {
           display: flex;
           gap: 16px;
           flex-wrap: nowrap;
         }
+
         .inline-three .field {
           flex: 1;
           margin-bottom: 0;
         }
-        .inline-three .field:first-child { flex: 1.6; }
+
+        .inline-three .field:first-child {
+          flex: 1.6;
+        }
+
         .button-row {
           display: flex;
           gap: 12px;
           flex-wrap: wrap;
           margin-bottom: 18px;
         }
+
         .bottom-actions {
           display: flex;
           justify-content: space-between;
@@ -474,12 +312,14 @@ lti.onDeepLinking(async (token, req, res) => {
           padding-top: 18px;
           border-top: 1px solid #e2e8f0;
         }
+
         .translation-panel {
           flex: 1 1 420px;
           display: flex;
           flex-direction: column;
           gap: 12px;
         }
+
         .translation-toggle {
           display: inline-flex;
           align-items: center;
@@ -488,11 +328,16 @@ lti.onDeepLinking(async (token, req, res) => {
           font-weight: 600;
           color: #0f172a;
         }
+
         .translation-options {
           display: none;
           max-width: 360px;
         }
-        .translation-options.active { display: block; }
+
+        .translation-options.active {
+          display: block;
+        }
+
         button {
           appearance: none;
           border: none;
@@ -503,34 +348,46 @@ lti.onDeepLinking(async (token, req, res) => {
           cursor: pointer;
           transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
         }
-        button:hover { transform: translateY(-1px); }
+
+        button:hover {
+          transform: translateY(-1px);
+        }
+
         button:disabled {
           opacity: 0.6;
           cursor: wait;
           transform: none;
         }
+
         .primary {
           background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);
           color: white;
           box-shadow: 0 10px 20px rgba(37, 99, 235, 0.18);
         }
+
         .secondary {
           background: #0f172a;
           color: white;
           box-shadow: 0 10px 20px rgba(15, 23, 42, 0.14);
         }
+
         .ghost {
           background: #f8fafc;
           color: #334155;
           border: 1px solid #cbd5e1;
         }
+
         .status {
           min-height: 20px;
           font-size: 13px;
           color: #475569;
           margin-bottom: 16px;
         }
-        .status.error { color: #b91c1c; }
+
+        .status.error {
+          color: #b91c1c;
+        }
+
         .preview-header {
           display: flex;
           justify-content: space-between;
@@ -539,27 +396,12 @@ lti.onDeepLinking(async (token, req, res) => {
           margin-bottom: 12px;
           flex-wrap: wrap;
         }
-        .preview-title-wrap {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
+
         .preview-title {
           font-size: 15px;
           font-weight: 700;
         }
-        .oak-indicator {
-          width: 12px;
-          height: 12px;
-          border-radius: 999px;
-          background: #cbd5e1;
-          box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
-        }
-        .oak-indicator.active {
-          background: #16a34a;
-          box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
-        }
-        .oak-label { font-size: 12px; color: #64748b; }
+
         .select-all-wrap {
           display: flex;
           align-items: center;
@@ -567,17 +409,20 @@ lti.onDeepLinking(async (token, req, res) => {
           font-size: 13px;
           color: #475569;
         }
+
         .chunks {
           display: grid;
           gap: 14px;
           margin-bottom: 18px;
         }
+
         .chunk-card {
           border: 1px solid #dbeafe;
           border-radius: 16px;
           background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
           overflow: hidden;
         }
+
         .chunk-top {
           display: flex;
           justify-content: space-between;
@@ -587,11 +432,13 @@ lti.onDeepLinking(async (token, req, res) => {
           border-bottom: 1px solid #e2e8f0;
           background: #eff6ff;
         }
+
         .chunk-title {
           font-size: 14px;
           font-weight: 700;
           color: #0f172a;
         }
+
         .chunk-check {
           display: flex;
           align-items: center;
@@ -600,11 +447,16 @@ lti.onDeepLinking(async (token, req, res) => {
           color: #475569;
           white-space: nowrap;
         }
-        .chunk-body { padding: 18px; }
+
+        .chunk-body {
+          padding: 18px;
+        }
+
         .chunk-body section {
           border-left: 4px solid #93c5fd;
           padding-left: 14px;
         }
+
         .chunk-body h1,
         .chunk-body h2,
         .chunk-body h3,
@@ -613,17 +465,23 @@ lti.onDeepLinking(async (token, req, res) => {
           margin-top: 0;
           color: #0f172a;
         }
-        .chunk-body p { line-height: 1.6; }
+
+        .chunk-body p {
+          line-height: 1.6;
+        }
+
         .chunk-body ul,
         .chunk-body ol {
           padding-left: 22px;
           line-height: 1.6;
         }
+
         .chunk-body hr {
           border: none;
           border-top: 1px solid #dbeafe;
           margin: 16px 0;
         }
+
         .empty-preview {
           border: 1px dashed #cbd5e1;
           border-radius: 16px;
@@ -631,11 +489,13 @@ lti.onDeepLinking(async (token, req, res) => {
           color: #64748b;
           background: #fff;
         }
+
         .loading {
           display: inline-flex;
           align-items: center;
           gap: 8px;
         }
+
         .dot {
           width: 8px;
           height: 8px;
@@ -644,20 +504,33 @@ lti.onDeepLinking(async (token, req, res) => {
           opacity: 0.4;
           animation: pulse 1s infinite ease-in-out;
         }
+
         .dot:nth-child(2) { animation-delay: 0.15s; }
         .dot:nth-child(3) { animation-delay: 0.3s; }
+
         .helper-note {
           font-size: 13px;
           color: #64748b;
         }
+
         @keyframes pulse {
           0%, 100% { opacity: 0.25; transform: translateY(0); }
           50% { opacity: 1; transform: translateY(-2px); }
         }
+
         @media (max-width: 720px) {
-          .form-grid { grid-template-columns: 1fr; }
-          .inline-three { flex-wrap: wrap; }
-          .bottom-actions { align-items: stretch; }
+          .form-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .inline-three {
+            grid-template-columns: 1fr;
+            flex-wrap: wrap;
+          }
+
+          .bottom-actions {
+            align-items: stretch;
+          }
         }
       </style>
     </head>
@@ -668,7 +541,7 @@ lti.onDeepLinking(async (token, req, res) => {
             <div class="eyebrow">Canvas + AI + Oak</div>
             <h1>AI Curriculum Builder</h1>
             <p class="subtext">
-              Choose what you are creating, select the audience/support level, type a standard, and the tool will try to auto-fill subject and year/grade using AI. When available, Oak National Academy curriculum context and lesson resources will be used as trusted reference material.
+              Choose what you are creating, select the audience/support level, type a standard, and the tool will try to auto-fill subject and year/grade using AI. When available, Oak National Academy curriculum context will be used as trusted reference material.
             </p>
           </div>
 
@@ -732,12 +605,7 @@ lti.onDeepLinking(async (token, req, res) => {
             <div id="status" class="status"></div>
 
             <div class="preview-header">
-              <div class="preview-title-wrap">
-                <div class="preview-title">Preview</div>
-                <div id="oakIndicator" class="oak-indicator"></div>
-                <div id="oakLabel" class="oak-label">Oak not used</div>
-              </div>
-
+              <div class="preview-title">Preview</div>
               <label class="select-all-wrap">
                 <input type="checkbox" id="selectAll" onchange="toggleAllChunks(this.checked)" />
                 Select all
@@ -786,8 +654,6 @@ lti.onDeepLinking(async (token, req, res) => {
         const selectAllEl = document.getElementById("selectAll");
         const translateCheckboxEl = document.getElementById("translateBeforeInsert");
         const translationOptionsEl = document.getElementById("translationOptions");
-        const oakIndicatorEl = document.getElementById("oakIndicator");
-        const oakLabelEl = document.getElementById("oakLabel");
 
         let generatedChunks = [];
 
@@ -803,16 +669,6 @@ lti.onDeepLinking(async (token, req, res) => {
           } else {
             button.disabled = false;
             button.textContent = label;
-          }
-        }
-
-        function setOakIndicator(used) {
-          if (used) {
-            oakIndicatorEl.classList.add("active");
-            oakLabelEl.textContent = "Oak used";
-          } else {
-            oakIndicatorEl.classList.remove("active");
-            oakLabelEl.textContent = "Oak not used";
           }
         }
 
@@ -861,7 +717,6 @@ lti.onDeepLinking(async (token, req, res) => {
           emptyPreviewEl.style.display = "block";
           emptyPreviewEl.textContent = "Nothing generated yet.";
           selectAllEl.checked = false;
-          setOakIndicator(false);
           setStatus("");
         }
 
@@ -936,7 +791,6 @@ lti.onDeepLinking(async (token, req, res) => {
           try {
             setStatus("Generating chunked content...");
             setLoading(generateBtn, true, "Generate");
-            setOakIndicator(false);
 
             const res = await fetch("/generate", {
               method: "POST",
@@ -962,14 +816,12 @@ lti.onDeepLinking(async (token, req, res) => {
             }));
 
             renderChunks();
-            setOakIndicator(Boolean(parsed.oakUsed));
             setStatus("Content generated successfully.");
           } catch (err) {
             console.error(err);
             setStatus("Generate failed. Please try again.", true);
             emptyPreviewEl.style.display = "block";
             emptyPreviewEl.textContent = "Generation failed.";
-            setOakIndicator(false);
           } finally {
             setLoading(generateBtn, false, "Generate");
           }
@@ -1066,37 +918,19 @@ lti.deploy({ port: PORT }).then(async () => {
     res.send("Canvas Deep Link Builder is running.");
   });
 
-  // Public Oak asset proxy
-  app.get("/oak-asset", async (req, res) => {
+  app.get("/test-oak", async (req, res) => {
     try {
-      const lesson = req.query.lesson;
-      const type = req.query.type;
-
-      if (!lesson || !type) {
-        return res.status(400).send("Missing lesson or type");
-      }
-
-      const oakRes = await oakFetch(`/lessons/${lesson}/assets/${type}`);
-
-      const contentType = oakRes.headers.get("content-type") || "application/octet-stream";
-      const contentLength = oakRes.headers.get("content-length");
-      const filename = `${lesson}-${type}`;
-
-      res.setHeader("Content-Type", contentType);
-      res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-      if (contentLength) {
-        res.setHeader("Content-Length", contentLength);
-      }
-      res.setHeader("Cache-Control", "public, max-age=3600");
-
-      const buffer = Buffer.from(await oakRes.arrayBuffer());
-      res.send(buffer);
+      const data = await oakFetch("/key-stages/ks2/subject/maths/lessons");
+      res.json(data);
     } catch (err) {
-      console.error("Oak asset proxy failed:", err.message);
-      res.status(500).send("Unable to load Oak asset");
+      console.error(err);
+      res.status(500).send(err.message);
     }
   });
 
+  // -----------------------------
+  // Detect subject + grade from standard using AI
+  // -----------------------------
   app.post("/detect-standard", async (req, res) => {
     try {
       const { standard } = req.body;
@@ -1138,13 +972,14 @@ Rules:
     }
   });
 
+  // -----------------------------
+  // Generate content with AI + Oak context
+  // -----------------------------
   app.post("/generate", async (req, res) => {
     try {
       const { itemType, supportLevel, standard, subject, year, prompt } = req.body;
-      const baseUrl = buildAppBaseUrl(req);
 
-      const oakResult = await buildOakBundle(subject, year, baseUrl);
-      console.log("OAK CONTEXT:", oakResult.context);
+      const oakContext = await buildOakContext(subject, year);
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -1239,7 +1074,7 @@ Teacher request: ${prompt}
 Use the following Oak National Academy curriculum context as trusted reference material when it is relevant. Align vocabulary, examples, misconceptions, and practice opportunities to it where appropriate.
 
 Oak context:
-${oakResult.context}`
+${oakContext}`
           }
         ]
       });
@@ -1252,18 +1087,17 @@ ${oakResult.context}`
         .replace(/\\s*```$/i, "");
 
       const parsed = JSON.parse(cleaned);
-      const finalChunks = [...(parsed.chunks || []), ...(oakResult.extraChunks || [])];
 
-      res.json({
-        chunks: finalChunks,
-        oakUsed: oakResult.used
-      });
+      res.json(parsed);
     } catch (err) {
       console.error(err);
-      res.status(500).send(JSON.stringify({ chunks: [], oakUsed: false }));
+      res.status(500).send(JSON.stringify({ chunks: [] }));
     }
   });
 
+  // -----------------------------
+  // Translate selected content while preserving HTML
+  // -----------------------------
   app.post("/translate-content", async (req, res) => {
     try {
       const { html, language } = req.body;
@@ -1307,6 +1141,9 @@ ${html}`
     }
   });
 
+  // -----------------------------
+  // Return deep link to Canvas
+  // -----------------------------
   app.post("/return-deeplink", async (req, res) => {
     try {
       const html = req.body.html || "<p>No content generated</p>";
